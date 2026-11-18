@@ -20,7 +20,8 @@ LOCK = {
     "resources": {
         dispatch.AGENT_KEY: {"id": "agent_1"},
         dispatch.REVIEWER_KEY: {"id": "agent_review"},
-        dispatch.ENVIRONMENT_KEY: {"id": "env_1"},
+        dispatch.ENVIRONMENTS["read"]: {"id": "env_read"},
+        dispatch.ENVIRONMENTS["write"]: {"id": "env_write"},
         dispatch.VAULT_KEY: {"id": "vlt_1"},
     },
 }
@@ -109,7 +110,7 @@ class FakeClient:
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
         self.current: dict[str, Any] = {}
-        self.mount_updates: list[tuple[str, str, str]] = []
+        self.deleted_credentials: list[str] = []
         self.credentials: list[Any] = []
         self.created_values: dict[str, str] = {}
         self.credential_updates: list[tuple[str, dict[str, Any]]] = []
@@ -118,13 +119,13 @@ class FakeClient:
                 create=self.create,
                 retrieve=self.retrieve,
                 events=ns(list=self.events, send=self.send),
-                resources=ns(list=self.resources, update=self.update_mount),
             ),
             vaults=ns(
                 credentials=ns(
                     list=self.list_credentials,
                     create=self.create_credential,
                     update=self.update_credential,
+                    delete=self.delete_credential,
                 )
             ),
         )
@@ -160,14 +161,6 @@ class FakeClient:
         if self.on_send:
             self.on_send()
 
-    def resources(self, session_id: str) -> list[Any]:
-        return [ns(type="file", id="file_1"), ns(type="github_repository", id="res_1")]
-
-    def update_mount(
-        self, resource_id: str, *, session_id: str, authorization_token: str
-    ) -> None:
-        self.mount_updates.append((session_id, resource_id, authorization_token))
-
     def list_credentials(self, vault_id: str) -> list[Any]:
         return self.credentials
 
@@ -194,6 +187,9 @@ class FakeClient:
         self, credential_id: str, *, vault_id: str, auth: dict[str, Any]
     ) -> None:
         self.credential_updates.append((credential_id, auth))
+
+    def delete_credential(self, credential_id: str, *, vault_id: str) -> None:
+        self.deleted_credentials.append(credential_id)
 
 
 class FakeGitHub:
@@ -277,17 +273,8 @@ class FakeGitHub:
 class FakeTokens:
     api_errors: tuple[type[Exception], ...] = ()
 
-    def __init__(self) -> None:
-        self.followed: list[tuple[str, bool]] = []
-
     def refresh(self) -> str:
         return "ghs_app"
-
-    def read_token(self) -> str:
-        return "ghs_read"
-
-    def follow(self, session_id: str, read_only: bool = False) -> None:
-        self.followed.append((session_id, read_only))
 
 
 class FakeClock:
@@ -441,12 +428,11 @@ def test_start_refuses_and_unlabels_without_a_session(
     assert github.unlabeled == [(799, dispatch.LABELS[stage])]
 
 
-def test_plan_needs_no_spec_and_mounts_the_repository_read_only() -> None:
+def test_plan_needs_no_spec_and_runs_in_the_read_environment() -> None:
     client, github = FakeClient(), FakeGitHub(comments=[])
     assert start(github, client, stage="plan") == "sesn_1"
     (created,) = client.created
-    (mount,) = created["resources"]
-    assert mount["authorization_token"] == "ghs_read"
+    assert created["environment_id"] == "env_read" and "resources" not in created
     kickoff, outcome = created["initial_events"]
     text = kickoff["content"][0]["text"]
     assert "Plan issue #799" in text and "push nothing" in text
@@ -455,22 +441,46 @@ def test_plan_needs_no_spec_and_mounts_the_repository_read_only() -> None:
     assert "## Factory spec" in outcome["description"]
 
 
+def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
+    order: list[str] = []
+
+    class Tokens(FakeTokens):
+        def refresh(self) -> str:
+            order.append("refresh")
+            return super().refresh()
+
+    class Client(FakeClient):
+        def create(self, **kwargs: Sdk) -> Sdk:
+            order.append("create")
+            return super().create(**kwargs)
+
+    dispatch.run_start(
+        client=Client(),
+        github=FakeGitHub(),
+        tokens=Tokens(),
+        lock=LOCK,
+        phase="build",
+        repo=REPO,
+        issue_number=799,
+        requester=OWNER,
+        factory_login=BOT,
+        budget_cents=1000,
+        labeled_at=LABELED_AT,
+    )
+    assert order.index("refresh") < order.index("create")
+
+
 def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
     client, github = FakeClient(), FakeGitHub()
     assert start(github, client) == "sesn_1"
     (created,) = client.created
-    assert created["agent"] == "agent_1" and created["environment_id"] == "env_1"
+    assert created["agent"] == "agent_1" and created["environment_id"] == "env_write"
     assert created["vault_ids"] == ["vlt_1"]
     assert created["budget"] == {
         "type": "limit",
         "max_list_cost": {"amount": "1000", "currency": "USD"},
     }
-    (mount,) = created["resources"]
-    assert mount["mount_path"] == "/workspace/nova-toll-budget-agent"
-    assert (
-        mount["authorization_token"] == "ghs_app"
-        and mount["checkout"]["name"] == "main"
-    )
+    assert "resources" not in created
     kickoff, outcome = created["initial_events"]
     text = kickoff["content"][0]["text"]
     assert "issue #799" in text and "factory/issue-799" in text and "issue_read" in text
@@ -492,7 +502,6 @@ def test_plan_posts_its_final_spec_as_the_one_reply_a_build_accepts() -> None:
     assert "earlier draft" not in report
     assert "Outcome: **spec**" in report and report.endswith(SPEC_TEXT)
     assert "`factory-build`" in report and "cost: $4.12" in report
-    assert tokens.followed == [("sesn_1", True)]
     assert len(github.posted) == 1
     posted = {
         "id": 12,
@@ -548,14 +557,12 @@ def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     assert github.opened == [("Loader drops rows", PR_BODY)]
     assert github.ready == [801] and client.sent == []
     (reviewer,) = client.created
-    (mount,) = reviewer["resources"]
-    assert mount["authorization_token"] == "ghs_read"
-    assert mount["checkout"]["name"] == "factory/issue-799"
+    assert reviewer["environment_id"] == "env_read" and "resources" not in reviewer
     assert reviewer["budget"]["max_list_cost"]["amount"] == "300"
     text = reviewer["initial_events"][0]["content"][0]["text"]
     assert f"<spec>\n{SPEC_TEXT}\n</spec>" in text and "issue #799" in text
+    assert "git fetch origin factory/issue-799" in text
     assert "define_outcome" not in str(reviewer["initial_events"])
-    assert tokens.followed == [("sesn_1", False), ("sesn_review", True)]
 
 
 def test_review_findings_go_to_the_worker_once_and_into_the_pr() -> None:
@@ -753,7 +760,7 @@ def private_key() -> str:
     ).decode()
 
 
-def test_tokens_are_minted_once_per_hour_and_reach_vault_and_mount(
+def test_tokens_are_minted_once_per_hour_and_reach_the_vault(
     private_key: str,
 ) -> None:
     now = [datetime(2026, 11, 16, 12, tzinfo=UTC)]
@@ -769,6 +776,9 @@ def test_tokens_are_minted_once_per_hour_and_reach_vault_and_mount(
         return {"token": f"ghs_{len(calls)}", "expires_at": expires}
 
     client = FakeClient()
+    client.credentials.append(
+        ns(id="cred_gh", auth=ns(type="environment_variable", secret_name="GH_TOKEN"))
+    )
     tokens = InstallationTokens(
         client=client,
         repo=REPO,
@@ -778,60 +788,25 @@ def test_tokens_are_minted_once_per_hour_and_reach_vault_and_mount(
         github=github,
         now=lambda: now[0],
     )
-    tokens.follow("sesn_1")
     assert tokens.refresh() == "ghs_2"
     assert [call[2]["permissions"] for call in calls[1:]] == [
         {"contents": "write", "issues": "write", "pull_requests": "write"},
-        {"contents": "read", "issues": "read", "pull_requests": "read"},
     ]
     assert calls[1][2]["repositories"] == ["nova-toll-budget-agent"]
-    assert client.created_values == {MCP_URL: "ghs_2", "GH_TOKEN": "ghs_3"}
-    assert client.mount_updates == [("sesn_1", "res_1", "ghs_2")]
+    assert client.created_values == {MCP_URL: "ghs_2"}
+    assert client.deleted_credentials == ["cred_gh"]
     now[0] += timedelta(minutes=39)
-    assert tokens.refresh() == "ghs_2" and len(calls) == 3
+    assert tokens.refresh() == "ghs_2" and len(calls) == 2
     now[0] += timedelta(minutes=2)
-    assert tokens.refresh() == "ghs_5"
-    assert [
-        auth["secret_value" if "secret_value" in auth else "token"]
-        for _, auth in client.credential_updates
-    ] == ["ghs_5", "ghs_6"]
-    assert client.mount_updates[-1] == ("sesn_1", "res_1", "ghs_5")
-
-
-def test_a_gone_session_stops_receiving_tokens(private_key: str) -> None:
-    class Gone(Exception):
-        status_code = 404
-
-    client = FakeClient()
-
-    def refuse(*args: object, **kwargs: object) -> None:
-        raise Gone("terminated")
-
-    def github(method: str, path: str, bearer: str, body: object = None) -> Sdk:
-        if method == "GET":
-            return {"id": 1}
-        return {"token": "ghs_x", "expires_at": "2026-11-16T13:00:00Z"}
-
-    client.beta.sessions.resources.update = refuse
-    tokens = InstallationTokens(
-        client=client,
-        repo=REPO,
-        vault_id="vlt_1",
-        app_client_id="Iv1.client",
-        private_key=private_key,
-        api_errors=(Gone,),
-        github=github,
-        now=lambda: datetime(2026, 11, 16, 12, tzinfo=UTC),
-    )
-    tokens.follow("sesn_1")
-    assert tokens.refresh() == "ghs_x" and tokens.mounts == {}
+    assert tokens.refresh() == "ghs_4"
+    assert [auth["token"] for _, auth in client.credential_updates] == ["ghs_4"]
 
 
 def test_lock_keys_name_the_factory_files() -> None:
     keys = (
         dispatch.AGENT_KEY,
         dispatch.REVIEWER_KEY,
-        dispatch.ENVIRONMENT_KEY,
+        *dispatch.ENVIRONMENTS.values(),
         dispatch.VAULT_KEY,
     )
     for key in keys:
@@ -888,30 +863,6 @@ def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
     lock = {"resources": {dispatch.AGENT_KEY: {"id": bad}}}
     with pytest.raises(SystemExit, match="malformed"):
         dispatch.lock_id(lock, dispatch.AGENT_KEY)
-
-
-def test_a_read_only_mount_receives_the_read_token(private_key: str) -> None:
-    def github(
-        method: str, path: str, bearer: str, body: dict[str, Any] | None = None
-    ) -> Sdk:
-        if body is None:
-            return {"id": 1}
-        token = "ghs_read" if body["permissions"]["contents"] == "read" else "ghs_write"
-        return {"token": token, "expires_at": "2026-11-16T13:00:00Z"}
-
-    client = FakeClient()
-    tokens = InstallationTokens(
-        client=client,
-        repo=REPO,
-        vault_id="vlt_1",
-        app_client_id="Iv1.client",
-        private_key=private_key,
-        github=github,
-        now=lambda: datetime(2026, 11, 16, 12, tzinfo=UTC),
-    )
-    tokens.follow("sesn_review", read_only=True)
-    assert tokens.read_token() == "ghs_read"
-    assert client.mount_updates == [("sesn_review", "res_1", "ghs_read")]
 
 
 def test_a_spec_that_cannot_be_built_is_explained_in_the_one_reply() -> None:

@@ -1,6 +1,6 @@
 name: tollchat-nightly-docs
 agent: ../agents/docs.md
-environment_id: ../environments/tollchat.yaml
+environment_id: ../environments/tollchat-box-read.yaml
 vault_ids: [../vaults/docs-github.yaml]
 resources:
   - path: ../memory_stores/docs.yaml

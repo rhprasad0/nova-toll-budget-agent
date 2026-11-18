@@ -27,8 +27,8 @@ jobs:
       contents: write
       id-token: write
     env:
-      ANT_VERSION: 2.9.0
-      ANT_SHA256: 69158f6a17e92e8e559e0061bea2530ac5b60976fb6d697673136d110ebe351f
+      ANT_VERSION: 2.11.0
+      ANT_SHA256: dd04cbd77fae03b7704423658b01a2c552e29cd6729b6c224167e9a5e98febb6
       LOCK_BRANCH: factory-state
       ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}

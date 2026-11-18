@@ -4,17 +4,18 @@
 # ///
 """Take one labeled issue through the factory.
 
-A run has two phases, chosen by the label. `factory` plans: the session mounts
-the repository read-only and ends with a spec, which the dispatcher posts on the
-issue once it passes its rubric. `factory-build` builds
-the spec Ryan approved: the worker pushes a branch, a reviewer session with its
-own context checks it once, the dispatcher opens the pull request, sends failing
+A run has two phases, chosen by the label. `factory` plans in the read
+environment and ends with a spec, which the dispatcher posts on the issue once it
+passes its rubric. `factory-build` builds the spec Ryan approved in the write
+environment: the worker pushes a branch, a reviewer session in the read
+environment checks it once, the dispatcher opens the pull request, sends failing
 required checks back to the worker, and marks the pull request ready once they
-pass. Each phase reports its outcome on the issue. Agent, environment and vault IDs come from
-claude-lock.json, which `ant apply` writes. The factory App's installation
-tokens last an hour, so the dispatcher re-mints them and writes each new one to
-the vault (for the GitHub MCP server and `gh`) and to the session's repository
-mount (for `git push`).
+pass. Each phase reports its outcome on the issue. Agent, environment and vault IDs
+come from claude-lock.json, which `ant apply` writes. Both environments are
+self-hosted sandboxes on the factory box (factory/sandbox), whose proxies hold the
+GitHub credentials for git and gh. The factory App's installation tokens last an
+hour, so the dispatcher re-mints them and writes each new one to the vault for the
+GitHub MCP server.
 """
 
 import argparse
@@ -39,9 +40,7 @@ type GitHubJson = Any
 
 API = "https://api.github.com"
 MCP_URL = "https://api.githubcopilot.com/mcp/"
-GH_TOKEN = "GH_TOKEN"
 PERMISSIONS = {"contents": "write", "issues": "write", "pull_requests": "write"}
-READ_PERMISSIONS = {"contents": "read", "issues": "read", "pull_requests": "read"}
 MARGIN = timedelta(minutes=20)
 ATTEMPTS = 3
 
@@ -97,42 +96,17 @@ class InstallationTokens:
         self.now = now
         self.api_errors = api_errors
         self.token: str | None = None
-        self.reader = ""
         self.expires_at = datetime.min.replace(tzinfo=UTC)
-        self.mounts: dict[str, tuple[str, bool]] = {}
-
-    def follow(self, session_id: str, read_only: bool = False) -> None:
-        for resource in self.client.beta.sessions.resources.list(session_id):
-            if resource.type == "github_repository":
-                self.mounts[session_id] = (resource.id, read_only)
-
-    def read_token(self) -> str:
-        self.refresh()
-        return self.reader
 
     def refresh(self) -> str:
         if self.token is not None and self.now() < self.expires_at - MARGIN:
             return self.token
-        token, reader, expires_at = self.mint()
-        self.write_vault(token, reader)
-        for session_id, (resource_id, read_only) in list(self.mounts.items()):
-            try:
-                self.client.beta.sessions.resources.update(
-                    resource_id,
-                    session_id=session_id,
-                    authorization_token=reader if read_only else token,
-                )
-            except self.api_errors as error:
-                status = getattr(error, "status_code", None)
-                print(
-                    f"::warning::Repository token of {session_id} not rotated: {error}"
-                )
-                if status is not None and status < 500 and status != 429:
-                    del self.mounts[session_id]
-        self.token, self.reader, self.expires_at = token, reader, expires_at
+        token, expires_at = self.mint()
+        self.write_vault(token)
+        self.token, self.expires_at = token, expires_at
         return token
 
-    def mint(self) -> tuple[str, str, datetime]:
+    def mint(self) -> tuple[str, datetime]:
         issued = int(self.now().timestamp())
         assertion = jwt.encode(
             {"iat": issued - 60, "exp": issued + 540, "iss": self.app_client_id},
@@ -140,34 +114,27 @@ class InstallationTokens:
             algorithm="RS256",
         )
         installation = self.github("GET", f"/repos/{self.repo}/installation", assertion)
-        minted: list[GitHubJson] = []
-        for permissions in (PERMISSIONS, READ_PERMISSIONS):
-            access = self.github(
-                "POST",
-                f"/app/installations/{installation['id']}/access_tokens",
-                assertion,
-                {"repositories": [self.repo.split("/")[1]], "permissions": permissions},
-            )
-            print(f"::add-mask::{access['token']}", flush=True)
-            minted.append(access)
-        writer, reader = minted
-        expires_at = min(
-            datetime.fromisoformat(access["expires_at"].replace("Z", "+00:00"))
-            for access in minted
+        access = self.github(
+            "POST",
+            f"/app/installations/{installation['id']}/access_tokens",
+            assertion,
+            {"repositories": [self.repo.split("/")[1]], "permissions": PERMISSIONS},
         )
-        return writer["token"], reader["token"], expires_at
+        print(f"::add-mask::{access['token']}", flush=True)
+        expires_at = datetime.fromisoformat(access["expires_at"].replace("Z", "+00:00"))
+        return access["token"], expires_at
 
-    def write_vault(self, token: str, reader: str) -> None:
+    def write_vault(self, token: str) -> None:
         credentials = self.client.beta.vaults.credentials
-        mcp_id = gh_id = None
+        mcp_id = None
         for credential in credentials.list(self.vault_id):
             auth = credential.auth
             if auth.type == "static_bearer" and auth.mcp_server_url.rstrip(
                 "/"
             ) == MCP_URL.rstrip("/"):
                 mcp_id = credential.id
-            elif auth.type == "environment_variable" and auth.secret_name == GH_TOKEN:
-                gh_id = credential.id
+            elif auth.type == "environment_variable":
+                credentials.delete(credential.id, vault_id=self.vault_id)
         if mcp_id is None:
             credentials.create(
                 self.vault_id,
@@ -184,27 +151,6 @@ class InstallationTokens:
                 vault_id=self.vault_id,
                 auth={"type": "static_bearer", "token": token},
             )
-        if gh_id is None:
-            credentials.create(
-                self.vault_id,
-                display_name="gh",
-                auth={
-                    "type": "environment_variable",
-                    "secret_name": GH_TOKEN,
-                    "secret_value": reader,
-                    "networking": {
-                        "type": "limited",
-                        "allowed_hosts": ["api.github.com"],
-                    },
-                    "injection_location": {"header": True},
-                },
-            )
-        else:
-            credentials.update(
-                gh_id,
-                vault_id=self.vault_id,
-                auth={"type": "environment_variable", "secret_value": reader},
-            )
 
 
 FACTORY = Path(__file__).resolve().parent
@@ -215,7 +161,10 @@ RUBRICS = {
 }
 AGENT_KEY = "./agents/worker.md"
 REVIEWER_KEY = "./agents/reviewer.md"
-ENVIRONMENT_KEY = "./environments/tollchat.yaml"
+ENVIRONMENTS = {
+    "read": "./environments/tollchat-box-read.yaml",
+    "write": "./environments/tollchat-box-write.yaml",
+}
 VAULT_KEY = "./vaults/github.yaml"
 LABELS = {"plan": "factory", "build": "factory-build"}
 SPEC_HEADING = "## Factory spec"
@@ -228,7 +177,6 @@ CLOSING = re.compile(
 BODY_LIMIT = 60000
 APPROVE = "APPROVE"
 CHANGES = "CHANGES REQUESTED"
-MOUNT = "/workspace/nova-toll-budget-agent"
 AUDIENCE = "https://api.anthropic.com"
 FEEDBACK_ROUNDS = 3
 POLL_SECONDS = 60
@@ -280,8 +228,6 @@ class Tokens(Protocol):
     api_errors: tuple[type[Exception], ...]
 
     def refresh(self) -> str: ...
-    def read_token(self) -> str: ...
-    def follow(self, session_id: str, read_only: bool = False) -> None: ...
 
 
 class GhCli:
@@ -566,16 +512,15 @@ def create_session(
     client: Sdk,
     lock: dict[str, Any],
     agent_key: str,
+    environment: str,
     repo: str,
     issue: int,
-    token: str,
-    checkout: str,
     budget_cents: int,
     initial_events: list[dict[str, Any]],
 ) -> str:
     session = client.beta.sessions.create(
         agent=lock_id(lock, agent_key),
-        environment_id=lock_id(lock, ENVIRONMENT_KEY),
+        environment_id=lock_id(lock, ENVIRONMENTS[environment]),
         vault_ids=[lock_id(lock, VAULT_KEY)],
         title=f"{repo}#{issue}",
         metadata={"repo": repo, "issue": str(issue)},
@@ -583,15 +528,6 @@ def create_session(
             "type": "limit",
             "max_list_cost": {"amount": str(budget_cents), "currency": "USD"},
         },
-        resources=[
-            {
-                "type": "github_repository",
-                "url": f"https://github.com/{repo}",
-                "authorization_token": token,
-                "checkout": {"type": "branch", "name": checkout},
-                "mount_path": MOUNT,
-            }
-        ],
         initial_events=initial_events,
     )
     return session.id
@@ -604,7 +540,6 @@ def start_session(
     phase: str,
     repo: str,
     issue: int,
-    token: str,
     author_name: str,
     author_email: str,
     budget_cents: int,
@@ -628,10 +563,9 @@ def start_session(
         client=client,
         lock=lock,
         agent_key=AGENT_KEY,
+        environment="read" if phase == "plan" else "write",
         repo=repo,
         issue=issue,
-        token=token,
-        checkout="main",
         budget_cents=budget_cents,
         initial_events=[
             text_event(kickoff),
@@ -733,7 +667,8 @@ def feedback(
 
 def review_request(issue: int, repo: str, branch: str, spec: str) -> str:
     return (
-        f"Review branch {branch} for issue #{issue} in {repo}. Read the issue and its "
+        f"Review branch {branch} for issue #{issue} in {repo}: check it out with "
+        f"`git fetch origin {branch} && git checkout --detach FETCH_HEAD`. Read the issue and its "
         f"comments with `gh issue view {issue} --comments`. The spec Ryan approved "
         f"follows.\n\n<spec>\n{spec}\n</spec>"
     )
@@ -954,17 +889,15 @@ def watch_build(
         client=run.client,
         lock=run.lock,
         agent_key=REVIEWER_KEY,
+        environment="read",
         repo=run.repo,
         issue=run.issue,
-        token=run.tokens.read_token(),
-        checkout=branch,
         budget_cents=review_budget_cents,
         initial_events=[
             text_event(review_request(run.issue, run.repo, branch, spec["body"]))
         ],
     )
     sessions.append(reviewer)
-    run.tokens.follow(reviewer, read_only=True)
     review_link = session_link(reviewer, run.lock)
     reviewed, review_idle = run.wait(reviewer, None)
     if reviewed is None:
@@ -1109,13 +1042,13 @@ def run_start(
         github.remove_label(issue_number, LABELS[phase], tokens.refresh())
         write_outputs(started="false")
         return None
+    tokens.refresh()
     session_id = start_session(
         client=client,
         lock=lock,
         phase=phase,
         repo=repo,
         issue=issue_number,
-        token=tokens.read_token() if phase == "plan" else tokens.refresh(),
         author_name=factory_login,
         author_email=github.noreply_email(factory_login),
         budget_cents=budget_cents,
@@ -1151,7 +1084,6 @@ def run_watch(
 ) -> None:
     report = f"The factory lost track of session {session_link(session_id, lock)}; see the workflow run."
     try:
-        tokens.follow(session_id, read_only=phase == "plan")
         run = Run(
             client=client,
             github=github,
