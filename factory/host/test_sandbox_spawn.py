@@ -6,6 +6,7 @@ from pathlib import Path
 from factory.host import dispatcher
 
 SPAWN = dispatcher.FACTORY / "sandbox/spawn.sh"
+CLEAN = dispatcher.FACTORY / "sandbox/clean.sh"
 
 
 def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
@@ -64,6 +65,36 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
     ]
     assert len(removals) == 2
     assert all(
-        {"work-work_1", "work-work_1-postgres", "work-work_1-retained"} <= set(r)
+        {"--volumes", "work-work_1", "work-work_1-postgres", "work-work_1-retained"}
+        <= set(r)
         for r in removals
     )
+
+
+def test_clean_removes_only_containers_older_than_any_session_and_old_workdirs(
+    tmp_path: Path,
+) -> None:
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    calls = tmp_path / "calls"
+    (fake / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\0" "$@" >> {calls}\nprintf "\\n" >> {calls}\n'
+        'case "$1 ${4:-}" in\n'
+        '  "ps "*) printf "gone\\nleaked\\nlive\\n" ;;\n'
+        '  "inspect gone") exit 1 ;;\n'
+        '  "inspect leaked") date -u -d "13 hours ago" +%Y-%m-%dT%H:%M:%S.000000000Z ;;\n'
+        '  "inspect live") date -u -d "4 hours ago" +%Y-%m-%dT%H:%M:%S.000000000Z ;;\n'
+        "esac\n"
+    )
+    (fake / "docker").chmod(0o755)
+    env = {"PATH": f"{fake}:{os.environ['PATH']}", "HOME": str(tmp_path)}
+    subprocess.run([str(CLEAN)], env=env, check=True)
+    lines = [line.split("\0")[:-1] for line in calls.read_text().splitlines()]
+    removed = [line for line in lines if line[0] == "rm"]
+    assert removed == [["rm", "--force", "--volumes", "leaked"]]
+    assert ["volume", "prune", "--all", "--force"] in lines
+    assert ["image", "prune", "--force", "--filter", "until=12h"] in lines
+    (find,) = [line for line in lines if line[0] == "run"]
+    assert f"{tmp_path}/sessions:/sessions" in find
+    assert find[-7:] == ["-mtime", "+1", "-exec", "rm", "-rf", "{}", "+"]
