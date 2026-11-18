@@ -1,0 +1,4 @@
+name: tollchat-box-write
+description: Self-hosted write sandbox on the factory box for TollChat builds; its proxy pushes to this repository.
+config:
+  type: self_hosted
