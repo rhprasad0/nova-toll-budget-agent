@@ -788,6 +788,17 @@ def _assert_required_event_callers(source: str) -> None:
     )
     assert 'test "$CALL_RESULT" = success' in gate_source
     assert 'test "$PLAN_RESULT" = success' in gate_source
+
+    provenance = ci_jobs["trusted-toolchain-provenance"]
+    assert (
+        provenance["uses"] == "rhprasad0/nova-toll-budget-agent/.github/workflows/"
+        "toolchain-provenance.yml@main"
+    )
+    assert provenance["permissions"] == {"contents": "read", "attestations": "read"}
+    provenance_gate = ci_jobs["toolchain-provenance"]
+    assert provenance_gate["if"] == "always()"
+    assert provenance_gate["needs"] == "trusted-toolchain-provenance"
+    assert 'test "$CALL_RESULT" = success' in workflow_run_source(provenance_gate)
     for job in ci_jobs.values():
         assert "continue-on-error" not in job
         for step in cast(list[dict[str, object]], job.get("steps", [])):
@@ -842,7 +853,12 @@ def test_required_event_callers_are_unfiltered_and_fail_closed() -> None:
             "github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before",
             "github.event.pull_request.base.sha || github.event.before",
         ),
-        ("@main", "@feature"),
+        ("v2-development-plan.yml@main", "v2-development-plan.yml@feature"),
+        ("toolchain-provenance.yml@main", "toolchain-provenance.yml@feature"),
+        (
+            "toolchain-provenance:\n    if: always()",
+            "toolchain-provenance:\n    if: success()",
+        ),
         (
             "development-plan:\n    if: always()",
             "development-plan:\n    if: success()",
@@ -1889,7 +1905,8 @@ def test_ci_jobs_run_verify() -> None:
         "frontend-browser": "needs Playwright browsers and the deployed development AI",
         "trusted-development-plan": "needs AWS credentials",
         "development-plan": "reports trusted-development-plan",
-        "toolchain-provenance": "needs the GitHub attestations API",
+        "trusted-toolchain-provenance": "runs toolchain-provenance.yml from main",
+        "toolchain-provenance": "reports trusted-toolchain-provenance",
     }
     jobs = yaml.safe_load(CI_WORKFLOW)["jobs"]
     inline = sorted(

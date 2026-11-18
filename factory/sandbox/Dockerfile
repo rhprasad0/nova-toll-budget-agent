@@ -1,4 +1,4 @@
-FROM ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:c8d9d79225fb2a6715221cc6b90ee05ab2debdbd169f88df8ce04db548dabdd3
+FROM ghcr.io/rhprasad0/nova-toll-budget-agent/toolchain@sha256:55f9efde563122cda78c9fdba2b385aef1db7e2e732d404f4d5570e879fa6e6f
 
 ARG ANT_VERSION=2.11.0
 ARG ANT_SHA256=dd04cbd77fae03b7704423658b01a2c552e29cd6729b6c224167e9a5e98febb6
