@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 from factory.host import dispatcher as factory
 
 ROOT = factory.CHECKOUT
@@ -25,6 +27,37 @@ def test_image_toolchains_match_ci() -> None:
     assert f'terraform_version: "{arg("TERRAFORM_VERSION")}"' in ci
     package = json.loads((ROOT / "v2/package.json").read_text())
     assert package["devDependencies"]["playwright"] == arg("PLAYWRIGHT_VERSION")
+
+
+def test_published_toolchain_target_carries_no_factory_proxy() -> None:
+    toolchain, factory_stage = DOCKERFILE.split("\nFROM toolchain AS factory\n")
+    assert toolchain.startswith("FROM debian:trixie-slim AS toolchain\n")
+    for box_only in ("proxy", "--from=certs", "run-verify.sh", "prepare-work.sh"):
+        assert box_only not in toolchain, box_only
+        assert box_only in factory_stage, box_only
+
+
+def test_only_main_publishes_the_toolchain_image_with_provenance() -> None:
+    workflows = ROOT / ".github/workflows"
+    publish_workflow = yaml.safe_load((workflows / "toolchain-image.yml").read_text())
+    assert set(publish_workflow[True]) == {"push", "workflow_dispatch"}
+    assert publish_workflow[True]["push"]["branches"] == ["main"]
+    publish = publish_workflow["jobs"]["publish"]
+    assert publish["if"] == "github.ref == 'refs/heads/main'"
+    assert publish["permissions"]["attestations"] == "write"
+    steps = [step.get("uses", "") + step.get("run", "") for step in publish["steps"]]
+    builds = [step for step in steps if "docker build" in step]
+    assert len(builds) == 1
+    assert "--target toolchain --file factory/agent/Dockerfile" in builds[0]
+    assert any(step.startswith("actions/attest-build-provenance@") for step in steps)
+    build_workflow = yaml.safe_load(
+        (workflows / "toolchain-image-build.yml").read_text()
+    )
+    assert set(build_workflow[True]) == {"pull_request"}
+    assert build_workflow["permissions"] == {"contents": "read"}
+    build_steps = build_workflow["jobs"]["build"]["steps"]
+    assert all("push" not in step.get("run", "") for step in build_steps)
+    assert all("login" not in step.get("run", "") for step in build_steps)
 
 
 def test_sandbox_reaches_out_only_through_the_shared_namespace() -> None:

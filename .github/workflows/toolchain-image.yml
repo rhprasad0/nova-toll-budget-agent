@@ -1,0 +1,59 @@
+name: toolchain-image
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - factory/agent/Dockerfile
+      - factory/agent/Dockerfile.dockerignore
+      - v2/scripts/install_check_tools.sh
+      - .github/workflows/toolchain-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/toolchain
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and push the toolchain target
+        id: push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          docker build --target toolchain --file factory/agent/Dockerfile \
+            --label "org.opencontainers.image.source=$SOURCE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$IMAGE:sha-$GITHUB_SHA" .
+          docker push --quiet "$IMAGE:sha-$GITHUB_SHA"
+          reference="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:sha-$GITHUB_SHA")"
+          echo "digest=${reference#*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Report the digest to pin
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "Pin consumers to \`$IMAGE@$DIGEST\`." >> "$GITHUB_STEP_SUMMARY"
