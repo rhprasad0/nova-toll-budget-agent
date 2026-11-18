@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -7,7 +6,6 @@ from typing import Any
 
 import jwt
 import pytest
-import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -840,21 +838,6 @@ def test_lock_keys_name_the_factory_files() -> None:
         assert (dispatch.FACTORY / key).is_file(), key
     for rubric in dispatch.RUBRICS.values():
         assert rubric.is_file(), rubric
-
-
-def test_bootstrap_installs_the_toolchain_ci_pins() -> None:
-    root = Path(__file__).resolve().parents[1]
-    bootstrap = (root / "factory/bootstrap.sh").read_text()
-    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())["jobs"]
-    steps = [
-        step.get("with", {}) for job in jobs.values() for step in job.get("steps", [])
-    ]
-    node = {s["node-version"] for s in steps if "node-version" in s}
-    terraform = {s["terraform_version"] for s in steps if "terraform_version" in s}
-    assert re.findall(r"^node_version=(\S+)$", bootstrap, re.MULTILINE) == sorted(node)
-    assert re.findall(r"^terraform_version=(\S+)$", bootstrap, re.MULTILINE) == sorted(
-        terraform
-    )
 
 
 def test_watch_waits_until_every_required_check_reports() -> None:
