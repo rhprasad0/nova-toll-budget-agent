@@ -11,12 +11,18 @@ proxy=(--env "HTTPS_PROXY=$FACTORY_PROXY" --env "HTTP_PROXY=$FACTORY_PROXY"
   --env "https_proxy=$FACTORY_PROXY" --env "http_proxy=$FACTORY_PROXY")
 
 cleanup() {
-  docker rm --force "$name-postgres" "$name-retained" >/dev/null 2>&1 || true
+  docker rm --force "$name" "$name-postgres" "$name-retained" >/dev/null 2>&1 || true
   docker network rm "$name" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT
 
 mkdir -p "$workdir"
+exec 9>"$workdir.lock"
+flock --nonblock 9 || {
+  echo "factory-spawn: session $ANTHROPIC_SESSION_ID is already running here" >&2
+  exit 1
+}
+cleanup
+trap cleanup EXIT
 if [[ ! -d "$workdir/nova-toll-budget-agent/.git" ]]; then
   docker run --rm "${proxy[@]}" --volume "$workdir:/workspace" --entrypoint git "$image" \
     clone --quiet https://github.com/rhprasad0/nova-toll-budget-agent \

@@ -1,13 +1,13 @@
 [Unit]
 Description=Limit TollChat factory sandbox users to their proxies
-After=network-pre.target
-Before=network-online.target
+DefaultDependencies=no
+Before=network-pre.target systemd-user-sessions.service
+Wants=network-pre.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/sbin/nft -f /etc/factory-sandbox/egress.nft
-ExecStop=/usr/sbin/nft delete table inet factory_sandbox
 
 [Install]
 WantedBy=multi-user.target

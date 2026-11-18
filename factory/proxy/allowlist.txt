@@ -13,19 +13,6 @@ releases.hashicorp.com
 # releases.hashicorp.com, and the CPython the package builds install with uv.
 github.com/cloudflare/terraform-provider-cloudflare/releases/download/
 github.com/astral-sh/python-build-standalone/releases/download/
-github.com/anthropics/anthropic-cli/releases/download/
-# This repository over git smart HTTP, and the GitHub API for it and for gh's GraphQL.
-github.com/rhprasad0/nova-toll-budget-agent/
-github.com/rhprasad0/nova-toll-budget-agent.git/
-api.github.com/repos/rhprasad0/nova-toll-budget-agent/
-api.github.com/graphql
-# Container registries the sandbox's rootless Docker pulls from; the proxy passes
-# them through without decrypting (see factory/sandbox/compose.yaml).
-registry-1.docker.io
-auth.docker.io
-production.cloudfront.docker.com
-ghcr.io
-pkg-containers.githubusercontent.com
 # GitHub redirects release downloads here, to signed URLs only it can issue.
 release-assets.githubusercontent.com
 # The RDS CA bundle the loader package pins:

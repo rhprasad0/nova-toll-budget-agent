@@ -23,6 +23,7 @@ CLOUDFLARE = "/cloudflare/terraform-provider-cloudflare/releases/download/"
 RDS = "/global/global-bundle.pem"
 REPOSITORY = "/rhprasad0/nova-toll-budget-agent"
 GITHUB_TOKEN = "github-test-token-not-a-credential"
+API_TOKEN = "github-read-token-not-a-credential"
 
 ECHO = r"""
 import datetime, http.server, json, ssl, threading
@@ -164,14 +165,29 @@ CASES: dict[str, list[Any]] = {
     "github_double_slash": ["https", "github.com", CLOUDFLARE + "v5//x"],
     "rds_suffix": ["https", "truststore.pki.rds.amazonaws.com", RDS + "X"],
     "repository": ["https", "github.com", REPOSITORY + ".git/info/refs"],
+    "repository_page": ["https", "github.com", REPOSITORY + "/issues/1"],
     "repository_api": ["https", "api.github.com", "/repos" + REPOSITORY + "/issues"],
     "other_repository_api": ["https", "api.github.com", "/repos/someone/repo"],
     "repository_push": ["post", "github.com", REPOSITORY + "/git-receive-pack"],
     "other_repository_push": ["post", "github.com", "/someone/repo/git-receive-pack"],
+    "worker_poll": ["https", "api.anthropic.com", "/v1/environments/env_1/work/poll"],
+    "pypi_upload": ["post", "pypi.org", "/legacy/"],
+    "registry_pull": [
+        "https",
+        "registry-1.docker.io",
+        "/v2/postgis/postgis/manifests/17",
+    ],
+    "registry_push": ["post", "registry-1.docker.io", "/v2/someone/x/blobs/uploads/"],
 }
+SANDBOX = {
+    "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_page",
+    "repository_api", "repository_push", "worker_poll", "registry_pull",
+}  # fmt: skip
 ALLOWED = {
-    "anthropic", "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_api",
-    "repository_push",
+    "subscription": {"anthropic", "pypi", "cloudflare_release", "rds_bundle", "worker_poll",
+                     "pypi_upload"},
+    "sandbox-read": SANDBOX,
+    "sandbox-write": SANDBOX,
 }  # fmt: skip
 
 
@@ -193,7 +209,7 @@ def results() -> Iterator[dict[str, Any]]:
     )
     docker("network", "create", "--internal", tag)
     aliases = ["api.anthropic.com", "pypi.org", "github.com", "api.github.com", "evil"]
-    aliases += ["truststore.pki.rds.amazonaws.com"]
+    aliases += ["truststore.pki.rds.amazonaws.com", "registry-1.docker.io"]
     try:
         docker("run", "--detach", "--name", f"{tag}-echo", "--network", tag,
                *[a for alias in aliases for a in ("--network-alias", alias)],
@@ -203,9 +219,9 @@ def results() -> Iterator[dict[str, Any]]:
                 ["--env", f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}"],
                 proxy_command(),
             ),
-            "sandbox-read": ([], sandbox_proxy_command()),
+            "sandbox-read": (sandbox_env(), sandbox_proxy_command()),
             "sandbox-write": (
-                ["--env", f"GITHUB_TOKEN={GITHUB_TOKEN}"],
+                [*sandbox_env(), "--env", f"GITHUB_TOKEN={GITHUB_TOKEN}"],
                 sandbox_proxy_command(),
             ),
         }
@@ -235,6 +251,15 @@ def proxy_command() -> list[str]:
     block = re.search(r"    command:\n((?:      - .+\n)+)", text)
     assert block
     return [line.strip()[2:] for line in block.group(1).splitlines()]
+
+
+def sandbox_env() -> list[str]:
+    return [
+        "--env",
+        "ALLOWLIST=sandbox-allowlist.txt",
+        "--env",
+        f"GITHUB_API_TOKEN={API_TOKEN}",
+    ]
 
 
 def sandbox_proxy_command() -> list[str]:
@@ -267,26 +292,28 @@ def test_token_reaches_only_https_to_anthropic(results: dict[str, Any]) -> None:
     assert authorization(subscription["cloudflare_release"]) is None
 
 
-def test_sandbox_proxies_pass_the_worker_key_and_hold_the_github_token(
+def test_sandbox_proxies_pass_the_worker_key_and_hold_the_github_tokens(
     results: dict[str, Any],
 ) -> None:
     basic = base64.b64encode(f"x-access-token:{GITHUB_TOKEN}".encode()).decode()
-    for proxy in ("sandbox-read", "sandbox-write"):
-        assert authorization(results[proxy]["anthropic"]) == "Bearer from-the-sandbox"
-    for proxy, git, api in (
-        ("subscription", None, None),
-        ("sandbox-read", None, None),
-        ("sandbox-write", f"Basic {basic}", f"Bearer {GITHUB_TOKEN}"),
-    ):
-        assert results[proxy]["repository"]["status"] == 200, proxy
-        assert authorization(results[proxy]["repository"]) == git, proxy
-        assert authorization(results[proxy]["repository_api"]) == api, proxy
-        assert results[proxy]["repository_push"]["status"] == 200, proxy
-        assert authorization(results[proxy]["repository_push"]) == git, proxy
+    for proxy, git in (("sandbox-read", None), ("sandbox-write", f"Basic {basic}")):
+        found = results[proxy]
+        assert authorization(found["worker_poll"]) == "Bearer from-the-sandbox", proxy
+        assert authorization(found["repository"]) == git, proxy
+        assert authorization(found["repository_push"]) == git, proxy
+        assert authorization(found["repository_page"]) is None, proxy
+        assert authorization(found["repository_api"]) == f"Bearer {API_TOKEN}", proxy
+        assert authorization(found["cloudflare_release"]) is None, proxy
 
 
-@pytest.mark.parametrize("name", [n for n in CASES if n not in ALLOWED])
-@pytest.mark.parametrize("proxy", ["subscription", "sandbox-read", "sandbox-write"])
-def test_refused(results: dict[str, Any], proxy: str, name: str) -> None:
-    assert results[proxy][name]["status"] in {0, 403}, results[proxy][name]
-    assert "echo" not in results[proxy][name]
+@pytest.mark.parametrize("proxy", sorted(ALLOWED))
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_only_allowlisted_requests_reach_upstream(
+    results: dict[str, Any], proxy: str, name: str
+) -> None:
+    found = results[proxy][name]
+    if name in ALLOWED[proxy]:
+        assert found["status"] == 200, found
+    else:
+        assert found["status"] in {0, 403}, found
+        assert "echo" not in found

@@ -1,6 +1,0 @@
-[Unit]
-Description=Remove TollChat factory session workdirs older than a week
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/find %h/sessions -mindepth 1 -maxdepth 1 -mtime +7 -exec rm -rf {} +

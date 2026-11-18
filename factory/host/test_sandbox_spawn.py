@@ -56,7 +56,13 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
     assert "HTTPS_PROXY=http://10.249.0.1:18081" in passed
     assert "DISPOSABLE_DOCKER_NETWORK=container:work-work_1" in passed
     assert "POSTGRES_CONTAINER_ID=work-work_1-postgres" in passed
-    assert any(
-        line.startswith("rm\0--force\0work-work_1-postgres")
+    removals = [
+        line.split("\0")[:-1]
         for line in calls.read_text().split("\n")
+        if line.startswith("rm\0")
+    ]
+    assert len(removals) == 2
+    assert all(
+        {"work-work_1", "work-work_1-postgres", "work-work_1-retained"} <= set(r)
+        for r in removals
     )
