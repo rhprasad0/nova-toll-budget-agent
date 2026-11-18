@@ -27,6 +27,16 @@ def test_image_toolchains_match_ci() -> None:
     assert package["devDependencies"]["playwright"] == arg("PLAYWRIGHT_VERSION")
 
 
+def test_published_toolchain_target_carries_no_factory_proxy() -> None:
+    toolchain, factory_stage = DOCKERFILE.split("\nFROM toolchain AS factory\n")
+    assert toolchain.startswith("FROM debian:trixie-slim AS toolchain\n")
+    for box_only in ("proxy", "--from=certs", "run-verify.sh", "prepare-work.sh"):
+        assert box_only not in toolchain, box_only
+        assert box_only in factory_stage, box_only
+    workflow = (ROOT / ".github/workflows/toolchain-image.yml").read_text()
+    assert "--target toolchain --file factory/agent/Dockerfile" in workflow
+
+
 def test_sandbox_reaches_out_only_through_the_shared_namespace() -> None:
     args = factory.sandbox_args("wo", 983)
     assert args[args.index("--network") + 1] == "container:wo-db"

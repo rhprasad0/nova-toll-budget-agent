@@ -1,0 +1,47 @@
+name: toolchain-image
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - factory/agent/Dockerfile
+      - factory/agent/Dockerfile.dockerignore
+      - v2/scripts/install_check_tools.sh
+      - .github/workflows/toolchain-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/toolchain
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and push the toolchain target
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          docker build --target toolchain --file factory/agent/Dockerfile \
+            --label "org.opencontainers.image.source=$SOURCE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$IMAGE:sha-$GITHUB_SHA" --tag "$IMAGE:main" .
+          docker push --quiet "$IMAGE:sha-$GITHUB_SHA"
+          docker push --quiet "$IMAGE:main"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:sha-$GITHUB_SHA")"
+          echo "Pin consumers to \`$digest\`." >> "$GITHUB_STEP_SUMMARY"

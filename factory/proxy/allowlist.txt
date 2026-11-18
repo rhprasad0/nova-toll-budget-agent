@@ -7,9 +7,6 @@ api.anthropic.com
 pypi.org
 files.pythonhosted.org
 registry.npmjs.org
-crates.io
-index.crates.io
-static.crates.io
 registry.terraform.io
 releases.hashicorp.com
 # GitHub release downloads, by path only: a Terraform provider that is not on
