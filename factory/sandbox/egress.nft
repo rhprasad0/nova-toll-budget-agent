@@ -15,8 +15,8 @@ table inet factory_sandbox {
   }
 
   chain prerouting {
-    type filter hook prerouting priority raw; policy accept;
-    ip daddr 10.249.0.1 iifname != "lo" drop
+    type filter hook prerouting priority mangle; policy accept;
+    ct state new ip daddr 10.249.0.1 iifname != "lo" drop
   }
 
   chain output {

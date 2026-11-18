@@ -15,6 +15,7 @@ releases.hashicorp.com GET
 github.com/cloudflare/terraform-provider-cloudflare/releases/download/ GET
 github.com/astral-sh/python-build-standalone/releases/download/ GET
 github.com/anthropics/anthropic-cli/releases/download/ GET
+github.com/cli/cli/releases/download/ GET
 release-assets.githubusercontent.com GET
 # This repository over git smart HTTP, and the GitHub API for it and gh's GraphQL.
 github.com/rhprasad0/nova-toll-budget-agent/
