@@ -441,6 +441,35 @@ def test_plan_needs_no_spec_and_runs_in_the_read_environment() -> None:
     assert "## Factory spec" in outcome["description"]
 
 
+def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
+    order: list[str] = []
+
+    class Tokens(FakeTokens):
+        def refresh(self) -> str:
+            order.append("refresh")
+            return super().refresh()
+
+    class Client(FakeClient):
+        def create(self, **kwargs: Sdk) -> Sdk:
+            order.append("create")
+            return super().create(**kwargs)
+
+    dispatch.run_start(
+        client=Client(),
+        github=FakeGitHub(),
+        tokens=Tokens(),
+        lock=LOCK,
+        phase="build",
+        repo=REPO,
+        issue_number=799,
+        requester=OWNER,
+        factory_login=BOT,
+        budget_cents=1000,
+        labeled_at=LABELED_AT,
+    )
+    assert order.index("refresh") < order.index("create")
+
+
 def test_build_starts_a_capped_session_with_the_approved_spec() -> None:
     client, github = FakeClient(), FakeGitHub()
     assert start(github, client) == "sesn_1"

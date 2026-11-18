@@ -1042,6 +1042,7 @@ def run_start(
         github.remove_label(issue_number, LABELS[phase], tokens.refresh())
         write_outputs(started="false")
         return None
+    tokens.refresh()
     session_id = start_session(
         client=client,
         lock=lock,

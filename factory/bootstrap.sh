@@ -23,4 +23,4 @@ else
   echo "v2/scripts/setup.sh: failed (exit $setup_status); last lines of $work/setup.log:"
   tail -n 20 "$work/setup.log"
 fi
-echo "you can run every job CI runs: .github/scripts/verify.sh loader origin/main, terraform, database origin/main, and factory"
+echo "you can run every verify.sh job: .github/scripts/verify.sh loader origin/main, terraform, database origin/main, and factory"
