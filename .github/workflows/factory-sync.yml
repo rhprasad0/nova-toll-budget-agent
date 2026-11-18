@@ -68,7 +68,7 @@ jobs:
           curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" |
             jq -r .value >"$ANTHROPIC_IDENTITY_TOKEN_FILE"
-          ant apply --yes .
+          ant apply --yes --prune .
       - name: Save the lock on the state branch
         if: always() && steps.lock.outcome == 'success'
         env:

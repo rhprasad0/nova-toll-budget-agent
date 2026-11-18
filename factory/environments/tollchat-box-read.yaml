@@ -1,4 +1,4 @@
 name: tollchat-box-read
-description: Self-hosted read sandbox on the factory box for TollChat plans, reviews and docs checks; its proxy holds no push credential.
+description: Self-hosted read sandbox on the factory box for TollChat reviews and docs checks; its proxy holds no push credential.
 config:
   type: self_hosted

@@ -1,6 +1,6 @@
 # TollChat
 
-**One engineer, an AI software factory, and a human on every decision.** Label a GitHub issue and the factory plans it, builds it on a branch in an isolated sandbox, has a separate session review it, and opens a pull request that CI checks. Only I merge. TollChat, a Northern Virginia toll-pricing chat agent, is the production application the factory builds and maintains.
+**One engineer, an AI software factory, and a human on every decision.** Label a GitHub issue and the factory builds it on a branch in an isolated sandbox, has a separate session review it, and opens a pull request that CI checks. Only I merge. TollChat, a Northern Virginia toll-pricing chat agent, is the production application the factory builds and maintains.
 
 [How the factory works](#how-the-factory-works) · [Factory controls](#factory-controls) ·
 [Factory plan](v2/plans/FACTORY-PLAN.md) · [TollChat live demo](https://tollchat.ai/) ·
@@ -8,12 +8,11 @@
 
 ## How the factory works
 
-1. **Intake.** Adding the `factory` label to an issue triggers [a workflow](.github/workflows/factory-dispatch.yml) that starts a managed-agent session for that issue.
-2. **Spec.** The agent reads the issue and posts a spec. I answer open questions in the issue thread; only my comments count as requirements.
-3. **Build.** A worker session in a [sandbox](factory/sandbox/) writes an end-to-end test first, confirms it fails for the reported reason, makes the change, runs the checks the sandbox supports, and pushes a branch. [Its definition](factory/agents/worker.md) tells it to choose the likeliest intent where the issue is open and to list each choice as an assumption.
-4. **Review.** A separate [reviewer session](factory/agents/reviewer.md) that has not seen the worker's reasoning checks the branch once. The worker fixes the findings it agrees with and rebuts the rest.
-5. **Pull request and CI.** The [dispatcher](factory/host/dispatcher.py) opens the pull request. Required CI, run through one entry point ([`verify.sh`](.github/scripts/verify.sh)), decides whether it can merge. Failing logs go back to the worker as evidence.
-6. **Merge.** I review and merge. The factory never merges, pushes to `main`, or moves tags.
+1. **Intake.** Adding the `factory` label to an issue triggers [a workflow](.github/workflows/factory-dispatch.yml) that starts a managed-agent session for that issue. The issue body and my comments are the spec; other comments are evidence, never requirements.
+2. **Build.** A worker session in a [sandbox](factory/sandbox/) writes an end-to-end test first, confirms it fails for the reported reason, makes the change, runs the checks the sandbox supports, and pushes a branch. [Its definition](factory/agents/worker.md) tells it to choose the likeliest intent where the issue is open and to list each choice as an assumption.
+3. **Review.** A separate [reviewer session](factory/agents/reviewer.md) that has not seen the worker's reasoning checks the branch once. The worker fixes the findings it agrees with and rebuts the rest.
+4. **Pull request and CI.** The [dispatcher](factory/dispatch.py) opens the pull request. Required CI, run through one entry point ([`verify.sh`](.github/scripts/verify.sh)), decides whether it can merge. Failing logs go back to the worker as evidence.
+5. **Merge.** I review and merge. The factory never merges, pushes to `main`, or moves tags.
 
 The factory's own nightly [documentation agent](factory/agents/docs.md) fixes Markdown statements the code proves false. Design history is in the [factory plan](v2/plans/FACTORY-PLAN.md) and the earlier [local-runner spec](v2/plans/FACTORY-SPEC.md), which it replaced.
 
@@ -26,9 +25,9 @@ Each row links a claim to its implementation and a way to inspect it. These cont
 | The factory cannot change the files that govern it or production | [Guard](factory/host/guard.py) rejects pull requests touching protected paths such as infrastructure, workflows, `factory/`, and `CLAUDE.md` | [Guard tests](factory/host/test_guard.py) and the [guard workflow](.github/workflows/factory-guard.yml) | Changes to those paths need a human-authored pull request. |
 | Closing keywords, secrets, and manifest edits are screened | [Guard](factory/host/guard.py) checks commit messages, scans for secrets, and limits release-manifest edits | [Guard tests](factory/host/test_guard.py) | Pattern-based; it catches known shapes only. |
 | Agent sandboxes reach only an allowlist of hosts | [Egress rules](factory/sandbox/egress.nft) and the [proxy allowlist](factory/proxy/allowlist.py) | [Proxy tests](factory/host/test_proxy.py) and [sandbox spawn tests](factory/host/test_sandbox_spawn.py) | The sandbox is isolated from production credentials; the host holds the GitHub login. |
-| Each role has its own narrow definition | [Worker, reviewer, and docs agents](factory/agents/) | [Factory tests](factory/host/test_factory.py) | The reviewer reports and cannot push. |
-| One dispatcher admits and sequences work | [Dispatcher](factory/host/dispatcher.py), [inbox](factory/host/inbox.py), and [work orders](factory/host/workorder.py) | [Inbox tests](factory/host/test_inbox.py) and [work-order tests](factory/host/test_workorder.py) | The runner takes one event at a time. |
-| Every run is traced and visible | [Trace export](factory/host/trace.py) and [dashboard](factory/host/dashboard.py) | [Dashboard tests](factory/host/test_dashboard.py) and [trace stack tests](factory/host/test_trace_stack.py) | Records what happened; it does not grade it. |
+| Each role has its own narrow definition | [Worker, reviewer, and docs agents](factory/agents/) | Each definition's `tools` list, applied by [Factory Sync](.github/workflows/factory-sync.yml) | The reviewer reports and cannot push. |
+| One dispatcher admits and sequences work | [Dispatcher](factory/dispatch.py) admits only issues I wrote and labelled, then runs the build, the review, the pull request and the CI rounds | [Dispatcher tests](factory/test_dispatch.py) | One run per issue at a time; a rerun waits until the last run's pull request is closed and its branch deleted. |
+| Every run is visible | The [dispatcher](factory/dispatch.py) reports how each run ended on its issue, linking the worker's and reviewer's sessions and, for a finished run, its cost | [Dispatcher tests](factory/test_dispatch.py) | Records what happened; it does not grade it. |
 | Rules are enforced by checks, not prose | [`CLAUDE.md`](CLAUDE.md) lists each rule beside the check that enforces it; [`verify.sh`](.github/scripts/verify.sh) runs them | [Documentation tests](v2/tests/test_documentation.py) | Judgment calls that no check covers go to me. |
 
 **Limits.** A human approves every merge. Review by another model session is a second opinion, not a proof. Checks that need AWS or the deployed app run only in CI.

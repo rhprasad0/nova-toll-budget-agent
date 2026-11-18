@@ -16,7 +16,6 @@ REPO = "rhprasad0/nova-toll-budget-agent"
 OWNER = "rhprasad0"
 BOT = "tollchat-factory[bot]"
 LOCK = {
-    "origin": {"workspace_id": "wrkspc_1"},
     "resources": {
         dispatch.AGENT_KEY: {"id": "agent_1"},
         dispatch.REVIEWER_KEY: {"id": "agent_review"},
@@ -27,6 +26,11 @@ LOCK = {
 }
 HEAD = "a" * 40
 PR_BODY = "Closes #799\n\nVerified: pytest"
+
+
+@pytest.fixture(autouse=True)
+def workspace(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_1")
 
 
 def issue(author: str = OWNER, state: str = "OPEN") -> dict[str, Any]:
@@ -689,3 +693,11 @@ def test_a_build_without_a_branch_posts_its_last_message() -> None:
     assert "Outcome: **manual**" in report and "pushed no branch" in report
     assert report.endswith("The change needs factory/host/guard.py.")
     assert len(github.posted) == 1 and client.created == []
+
+
+def test_reports_link_sessions_in_the_workspace_from_the_environment() -> None:
+    github = built()
+    report = watch(FakeClient([phase("idle_1")]), github)
+    console = "https://platform.claude.com/workspaces/wrkspc_1/sessions"
+    assert f"[`sesn_1`]({console}/sesn_1)" in report
+    assert f"[`sesn_review`]({console}/sesn_review)" in report

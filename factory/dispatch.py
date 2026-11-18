@@ -419,8 +419,8 @@ def lock_id(lock: dict[str, Any], key: str) -> str:
     return resource_id
 
 
-def session_link(session_id: str, lock: dict[str, Any]) -> str:
-    workspace = lock.get("origin", {}).get("workspace_id")
+def session_link(session_id: str) -> str:
+    workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
     if not isinstance(workspace, str) or not RESOURCE_ID.fullmatch(workspace):
         return f"`{session_id}`"
     return f"[`{session_id}`](https://platform.claude.com/workspaces/{workspace}/sessions/{session_id})"
@@ -639,7 +639,7 @@ def report(
 ) -> str:
     amounts = [cents(run.client.beta.sessions.retrieve(s)) for s in sessions]
     lines = [
-        f"The factory's session {session_link(run.session_id, run.lock)} {status}.",
+        f"The factory's session {session_link(run.session_id)} {status}.",
         "",
         f"Outcome: **{result}** · stop reason: `{stop}` · cost: {dollars(amounts)}",
     ]
@@ -704,7 +704,7 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
     session, idle = run.wait(run.session_id, None)
     if session is None:
         interrupt(run.client, run.session_id)
-        return f"The factory interrupted session {session_link(run.session_id, run.lock)} after {minutes} minutes.\n\nOutcome: **blocked**"
+        return f"The factory interrupted session {session_link(run.session_id)} after {minutes} minutes.\n\nOutcome: **blocked**"
     stop = idle.stop_reason.type if idle else "terminated"
     head = run.github.branch_head(branch)
     sessions = [run.session_id]
@@ -735,7 +735,7 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
         initial_events=[text_event(review_request(run.issue, run.repo, branch))],
     )
     sessions.append(reviewer)
-    review_link = session_link(reviewer, run.lock)
+    review_link = session_link(reviewer)
     reviewed, review_idle = run.wait(reviewer, None)
     if reviewed is None:
         interrupt(run.client, reviewer)
@@ -883,7 +883,7 @@ def run_start(
     write_outputs(started="true", session_id=session_id)
     comment_id = github.comment(
         issue_number,
-        f"The factory started session {session_link(session_id, lock)} and reports back here when it ends.",
+        f"The factory started session {session_link(session_id)} and reports back here when it ends.",
         tokens.refresh(),
     )
     write_outputs(status_comment_id=str(comment_id))
@@ -904,7 +904,7 @@ def run_watch(
     review_budget_cents: int,
     clock: Clock,
 ) -> None:
-    report = f"The factory lost track of session {session_link(session_id, lock)}; see the workflow run."
+    report = f"The factory lost track of session {session_link(session_id)}; see the workflow run."
     try:
         run = Run(
             client=client,
