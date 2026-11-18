@@ -39,6 +39,7 @@ USER agent
 RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
 
 ENV PATH="/home/agent/.local/bin:${PATH}" \
+    UV_PYTHON=3.13 \
     DISABLE_AUTOUPDATER=1 \
     CHECKPOINT_DISABLE=1
 WORKDIR /work

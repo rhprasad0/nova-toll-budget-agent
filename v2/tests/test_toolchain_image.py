@@ -24,6 +24,12 @@ def arg(name: str) -> str:
     return match.group(1)
 
 
+def env(name: str) -> str:
+    match = re.search(rf"^\s*(?:ENV )?{name}=(\S+?)(?: \\)?$", DOCKERFILE, re.M)
+    assert match, f"factory/agent/Dockerfile must set ENV {name}"
+    return match.group(1)
+
+
 def jobs(workflow: str) -> dict[str, dict[str, Any]]:
     document: dict[str, Any] = yaml.safe_load((WORKFLOWS / workflow).read_text())
     return document["jobs"]
@@ -57,6 +63,7 @@ def test_toolchain_pins_outside_the_image_match_its_args() -> None:
     expected = {
         "node-version": arg("NODE_VERSION"),
         "terraform_version": arg("TERRAFORM_VERSION"),
+        "python-version": env("UV_PYTHON"),
     }
     uv = arg("UV_VERSION")
     for path in sorted(WORKFLOWS.glob("*.yml")):
