@@ -21,7 +21,7 @@ class Repository:
         self.root = root
         self.log = root / ".calls"
         self.env = {
-            **{k: v for k, v in os.environ.items() if k != "UV_PROJECT_ENVIRONMENT"},
+            **os.environ,
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_OPTIONAL_LOCKS": "0",
@@ -192,18 +192,6 @@ def test_document_commit_still_requires_secret_scan(repository: Repository) -> N
     assert repository.calls() == [["gitleaks", "protect", "--staged", "--redact"]]
     repository.write(".gitleaks.toml", "# unstaged override\n")
     assert repository.run().returncode == 1
-
-
-def test_python_checkers_follow_the_uv_project_environment(
-    repository: Repository,
-) -> None:
-    elsewhere = repository.root / "toolchain-venv"
-    (repository.root / "v2/.venv").rename(elsewhere)
-    repository.env["UV_PROJECT_ENVIRONMENT"] = str(elsewhere)
-    repository.write("v2/example.py", "value = 3\n")
-    repository.git("add", "v2/example.py")
-    assert repository.run().returncode == 0
-    assert {call[0] for call in repository.calls()} >= {"ruff", "pyright"}
 
 
 @pytest.mark.parametrize("missing", [".bin/gitleaks", "v2/.venv/bin/ruff"])

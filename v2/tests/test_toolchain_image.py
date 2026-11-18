@@ -96,11 +96,11 @@ def test_toolchain_pins_outside_the_image_match_its_args() -> None:
             )
 
 
-def run_wrapper(tmp_path: Path, security: str) -> list[str]:
-    tmp_path.mkdir()
-    socket = tmp_path / "docker.sock"
+def run_wrapper(home: Path, security: str) -> list[str]:
+    home.mkdir()
+    socket = home / "docker.sock"
     socket.touch()
-    fake = tmp_path / "bin"
+    fake = home / "bin"
     fake.mkdir()
     (fake / "docker").write_text(
         "#!/usr/bin/env bash\n"
@@ -109,9 +109,9 @@ def run_wrapper(tmp_path: Path, security: str) -> list[str]:
     )
     (fake / "docker").chmod(0o755)
     result = subprocess.run(
-        [str(ROOT / "v2/scripts/toolchain.sh")],
-        cwd=ROOT,
-        env={**os.environ, "PATH": f"{fake}:{os.environ['PATH']}"},
+        [str(ROOT / "v2/scripts/toolchain.sh"), "echo", "two words"],
+        cwd=ROOT / "v2",
+        env={**os.environ, "HOME": str(home), "PATH": f"{fake}:{os.environ['PATH']}"},
         capture_output=True,
         text=True,
         check=True,
@@ -126,11 +126,20 @@ def test_toolchain_wrapper_runs_the_ci_digest_on_the_checkout(tmp_path: Path) ->
         ("[name=seccomp name=rootless]", ["--user", "0:0"]),
         ("[name=seccomp]", ["--user", f"{os.getuid()}:{os.getgid()}"]),
     ):
-        args = run_wrapper(tmp_path / user[1].replace(":", "-"), security)
-        assert args[-2:] == [digest, "bash"]
+        home = tmp_path / ("rootless" if "rootless" in security else "rootful")
+        args = run_wrapper(home, security)
+        assert args[-3:] == [digest, "echo", "two words"]
         assert args[args.index("--user") : args.index("--user") + 2] == user
-        assert f"{ROOT}:{ROOT}" in args
-        assert args[args.index("--workdir") + 1] == str(ROOT)
-        assert any(arg.endswith(":/var/run/docker.sock") for arg in args)
-        assert f"UV_PROJECT_ENVIRONMENT={ROOT}/v2/.venv-toolchain" in args
+        assert ("--group-add" in args) == ("rootless" not in security)
+        volumes = {args[i + 1] for i, arg in enumerate(args) if arg == "--volume"}
+        assert {
+            f"{ROOT}:{ROOT}",
+            f"{ROOT}/v2/.venv-toolchain:{ROOT}/v2/.venv",
+            f"{home}/docker.sock:/var/run/docker.sock",
+            f"{home}/.aws:{home}/.aws",
+        } <= volumes
+        assert args[args.index("--workdir") + 1] == str((ROOT / "v2").resolve())
+        assert f"HOME={home}" in args
+        assert {"--init", "--interactive"} <= set(args)
+        assert "--tty" not in args
         assert "--privileged" not in args

@@ -144,9 +144,8 @@ def commands(selected: set[str], paths: list[str]) -> list[list[str]]:
     result: list[list[str]] = []
     if "python" in selected:
         setup = "uv sync --locked --project v2"
-        venv = os.environ.get("UV_PROJECT_ENVIRONMENT", "v2/.venv")
-        ruff = require_tool(f"{venv}/bin/ruff", setup)
-        pyright = require_tool(f"{venv}/bin/pyright", setup)
+        ruff = require_tool("v2/.venv/bin/ruff", setup)
+        pyright = require_tool("v2/.venv/bin/pyright", setup)
         files = [path for path in paths if group(path) == "python"]
         # Explicit --config makes Ruff resolve relative src against cwd, not TOML.
         roots = "src = " + json.dumps([str(ROOT / "v2"), str(ROOT)])
