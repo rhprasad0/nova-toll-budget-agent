@@ -1,0 +1,27 @@
+name: toolchain-image-build
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - factory/agent/Dockerfile
+      - factory/agent/Dockerfile.dockerignore
+      - v2/scripts/install_check_tools.sh
+      - .github/workflows/toolchain-image.yml
+      - .github/workflows/toolchain-image-build.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the toolchain target without publishing it
+        run: docker build --target toolchain --file factory/agent/Dockerfile .

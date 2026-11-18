@@ -3,37 +3,22 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    paths: &image-inputs
+  push:
+    branches: ["main"]
+    paths:
       - factory/agent/Dockerfile
       - factory/agent/Dockerfile.dockerignore
       - v2/scripts/install_check_tools.sh
       - .github/workflows/toolchain-image.yml
-  push:
-    branches: ["main"]
-    paths: *image-inputs
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Build the toolchain target without publishing it
-        run: docker build --target toolchain --file factory/agent/Dockerfile .
-
   publish:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

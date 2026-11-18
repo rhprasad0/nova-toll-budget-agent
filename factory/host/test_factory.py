@@ -38,25 +38,26 @@ def test_published_toolchain_target_carries_no_factory_proxy() -> None:
 
 
 def test_only_main_publishes_the_toolchain_image_with_provenance() -> None:
-    workflow = yaml.safe_load(
-        (ROOT / ".github/workflows/toolchain-image.yml").read_text()
-    )
-    jobs = workflow["jobs"]
-    assert jobs["build"]["if"] == "github.event_name == 'pull_request'"
-    assert "packages" not in jobs["build"]["permissions"]
-    assert all("push" not in step.get("run", "") for step in jobs["build"]["steps"])
-    publish = jobs["publish"]
-    assert publish["if"] == (
-        "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
-    )
+    workflows = ROOT / ".github/workflows"
+    publish_workflow = yaml.safe_load((workflows / "toolchain-image.yml").read_text())
+    assert set(publish_workflow[True]) == {"push", "workflow_dispatch"}
+    assert publish_workflow[True]["push"]["branches"] == ["main"]
+    publish = publish_workflow["jobs"]["publish"]
+    assert publish["if"] == "github.ref == 'refs/heads/main'"
     assert publish["permissions"]["attestations"] == "write"
     steps = [step.get("uses", "") + step.get("run", "") for step in publish["steps"]]
     builds = [step for step in steps if "docker build" in step]
     assert len(builds) == 1
     assert "--target toolchain --file factory/agent/Dockerfile" in builds[0]
     assert any(step.startswith("actions/attest-build-provenance@") for step in steps)
-    assert set(workflow[True]) == {"pull_request", "push", "workflow_dispatch"}
-    assert workflow[True]["push"]["branches"] == ["main"]
+    build_workflow = yaml.safe_load(
+        (workflows / "toolchain-image-build.yml").read_text()
+    )
+    assert set(build_workflow[True]) == {"pull_request"}
+    assert build_workflow["permissions"] == {"contents": "read"}
+    build_steps = build_workflow["jobs"]["build"]["steps"]
+    assert all("push" not in step.get("run", "") for step in build_steps)
+    assert all("login" not in step.get("run", "") for step in build_steps)
 
 
 def test_sandbox_reaches_out_only_through_the_shared_namespace() -> None:
