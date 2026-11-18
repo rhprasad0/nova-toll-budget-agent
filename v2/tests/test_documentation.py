@@ -135,7 +135,7 @@ def test_readme_leads_with_the_factory() -> None:
         "factory/host/guard.py",
         "factory/agents/",
         "factory/sandbox/egress.nft",
-        "factory/host/dispatcher.py",
+        "factory/dispatch.py",
         ".github/scripts/verify.sh",
     ):
         assert f"]({path})" in readme, f"Link {path} from the factory section."
