@@ -1,0 +1,32 @@
+# What a self-hosted sandbox may reach through its proxy (see allowlist.txt for the
+# format). An entry ending in " GET" allows only GET and HEAD.
+# The worker's Managed Agents endpoints, not inference:
+api.anthropic.com/v1/environments/
+api.anthropic.com/v1/sessions/
+api.anthropic.com/v1/memory_stores/
+api.anthropic.com/v1/skills/
+# Package registries the README's build setup and verify download from:
+pypi.org GET
+files.pythonhosted.org GET
+registry.npmjs.org GET
+registry.terraform.io GET
+releases.hashicorp.com GET
+# GitHub release downloads, by path only.
+github.com/cloudflare/terraform-provider-cloudflare/releases/download/ GET
+github.com/astral-sh/python-build-standalone/releases/download/ GET
+github.com/anthropics/anthropic-cli/releases/download/ GET
+github.com/cli/cli/releases/download/ GET
+release-assets.githubusercontent.com GET
+# This repository over git smart HTTP, and the GitHub API for it and gh's GraphQL.
+github.com/rhprasad0/nova-toll-budget-agent/
+github.com/rhprasad0/nova-toll-budget-agent.git/
+api.github.com/repos/rhprasad0/nova-toll-budget-agent/
+api.github.com/graphql
+# Container registries the sandbox users' rootless Docker pulls from.
+registry-1.docker.io GET
+auth.docker.io GET
+production.cloudfront.docker.com GET
+ghcr.io GET
+pkg-containers.githubusercontent.com GET
+# The RDS CA bundle the loader package pins:
+truststore.pki.rds.amazonaws.com/global/global-bundle.pem GET

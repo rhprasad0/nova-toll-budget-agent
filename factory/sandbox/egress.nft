@@ -1,0 +1,29 @@
+table inet factory_sandbox
+delete table inet factory_sandbox
+
+table inet factory_sandbox {
+  set read {
+    type uid
+    flags interval
+    elements = { @READ_UIDS@ }
+  }
+
+  set write {
+    type uid
+    flags interval
+    elements = { @WRITE_UIDS@ }
+  }
+
+  chain prerouting {
+    type filter hook prerouting priority mangle; policy accept;
+    ct state new ip daddr 10.249.0.1 iifname != "lo" drop
+  }
+
+  chain output {
+    type filter hook output priority filter; policy accept;
+    meta skuid @read ct original ip daddr 10.249.0.1 ct original proto-dst 18080 accept
+    meta skuid @write ct original ip daddr 10.249.0.1 ct original proto-dst 18081 accept
+    meta skuid @read counter reject
+    meta skuid @write counter reject
+  }
+}

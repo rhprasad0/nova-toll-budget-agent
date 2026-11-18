@@ -89,6 +89,23 @@ def test_proxy_allowlist_has_no_wildcards_and_github_only_by_path() -> None:
     assert "" not in github
 
 
+def test_sandbox_allowlist_reaches_the_worker_api_but_not_inference() -> None:
+    hosts: dict[str, list[str]] = {}
+    lines = (factory.FACTORY / "proxy/sandbox-allowlist.txt").read_text().splitlines()
+    for line in lines:
+        if line.strip() and not line.startswith("#"):
+            host, _, path = line.split()[0].partition("/")
+            hosts.setdefault(host, []).append(path)
+    assert sorted(hosts["api.anthropic.com"]) == [
+        "v1/environments/",
+        "v1/memory_stores/",
+        "v1/sessions/",
+        "v1/skills/",
+    ]
+    assert not [host for host in hosts if "*" in host]
+    assert "" not in hosts["github.com"] and "" not in hosts["api.github.com"]
+
+
 def test_verify_script_comes_from_this_checkout() -> None:
     assert (Path(factory.CHECKOUT) / ".github/scripts/verify.sh").is_file()
     assert "/work/in/verify.sh" in (factory.FACTORY / "agent/run-verify.sh").read_text()

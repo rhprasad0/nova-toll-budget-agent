@@ -1,0 +1,38 @@
+name: factory-sandbox
+
+x-proxy: &proxy
+  build: ../proxy
+  image: factory-proxy:dev
+  command:
+    - mitmdump
+    - --set
+    - rawtcp=false
+    - --set
+    - stream_large_bodies=1
+    - --mode
+    - regular@8080
+    - -s
+    - /addon/allowlist.py
+  restart: unless-stopped
+
+services:
+  proxy-read:
+    <<: *proxy
+    ports: ["10.249.0.1:18080:8080"]
+    environment:
+      ALLOWLIST: sandbox-allowlist.txt
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:?}
+    volumes:
+      - ${HOME}/.local/state/factory-sandbox/certs:/home/mitmproxy/.mitmproxy
+      - ${HOME}/.local/state/factory-sandbox/flows-read:/state/flows
+
+  proxy-write:
+    <<: *proxy
+    ports: ["10.249.0.1:18081:8080"]
+    environment:
+      ALLOWLIST: sandbox-allowlist.txt
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:?}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?}
+    volumes:
+      - ${HOME}/.local/state/factory-sandbox/certs:/home/mitmproxy/.mitmproxy
+      - ${HOME}/.local/state/factory-sandbox/flows-write:/state/flows

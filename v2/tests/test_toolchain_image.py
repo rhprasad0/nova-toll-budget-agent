@@ -44,7 +44,11 @@ def test_every_toolchain_consumer_pins_the_ci_digest() -> None:
                 f"{workflow} job {name} pins {container['image']}; "
                 f"bump it to {digest}, the digest ci.yml's v2-loader pins"
             )
-    for path in sorted(WORKFLOWS.glob("*.yml")):
+    sandbox = (ROOT / "factory/sandbox/Dockerfile").read_text()
+    assert sandbox.startswith(f"FROM {digest}\n"), (
+        f"factory/sandbox/Dockerfile must start FROM {digest}"
+    )
+    for path in [*sorted(WORKFLOWS.glob("*.yml")), ROOT / "factory/sandbox/Dockerfile"]:
         for found in IMAGE.findall(path.read_text()):
             assert found == digest, f"{path.name} pins {found}; bump it to {digest}"
 

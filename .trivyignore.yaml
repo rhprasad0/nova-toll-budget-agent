@@ -15,3 +15,7 @@ misconfigurations:
     paths: [infra/tailscale.tf]
     statement: Encrypt by staged router cutover; replacing the sole bridge unattended risks an outage.
     expired_at: 2027-02-13
+  - id: AVD-DS-0002
+    paths: [factory/sandbox/Dockerfile]
+    statement: The sandbox runs under its user's rootless Docker with all capabilities dropped, so container root is that unprivileged host user and owns the session workdir.
+    expired_at: 2027-02-13

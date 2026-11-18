@@ -1,0 +1,9 @@
+[Unit]
+Description=Remove week-old TollChat factory session workdirs for %i daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

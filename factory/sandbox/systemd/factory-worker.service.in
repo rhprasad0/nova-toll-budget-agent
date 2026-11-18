@@ -1,0 +1,19 @@
+[Unit]
+Description=TollChat factory sandbox worker for @USER@, slot %i
+Requires=factory-egress.service user@@UID@.service
+After=factory-egress.service user@@UID@.service
+
+[Service]
+User=@USER@
+EnvironmentFile=/etc/factory-sandbox/@USER@.env
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+Environment=DOCKER_HOST=unix:///run/user/@UID@/docker.sock
+Environment=SSL_CERT_FILE=/etc/factory-sandbox/ca-bundle.pem
+ExecStart=/usr/local/bin/ant beta:worker poll --on-work /usr/local/libexec/factory-spawn --log-format json
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
