@@ -27,9 +27,6 @@ MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 _DRILL_ID = re.compile(r"[a-f0-9]{16}\Z")
 
 
-# tick_minutes is each feed's EventBridge rule cadence in infra/triggers.tf and
-# the S3 key's bucket size -- keep the two in step or two polls of the same feed
-# will floor into one key and overwrite each other.
 class FeedConfig(TypedDict):
     url: str
     token_param_env: str

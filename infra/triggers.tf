@@ -6,9 +6,8 @@ resource "aws_cloudwatch_event_rule" "poll_tick" {
 }
 
 resource "aws_cloudwatch_event_target" "fetcher" {
-  rule = aws_cloudwatch_event_rule.poll_tick.name
-  arn  = aws_lambda_function.fetcher.arn
-  # This rule now carries I-95 only; I-66 has its own, faster rule below.
+  rule  = aws_cloudwatch_event_rule.poll_tick.name
+  arn   = aws_lambda_function.fetcher.arn
   input = jsonencode({ feeds = ["i95"] })
 }
 
