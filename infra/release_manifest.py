@@ -41,10 +41,10 @@ MANIFEST_KEYS = {
 }
 PROVIDER_IDENTITY = {
     "provider": "hashicorp/aws",
-    "provider_version": "6.60.0",
+    "provider_version": "6.73.0",
     "terraform_version": "1.15.8",
     "lockfile": "v2/infra/.terraform.lock.hcl",
-    "lock_identity": "V2-AWS60",
+    "lock_identity": "V2-AWS73",
 }
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
