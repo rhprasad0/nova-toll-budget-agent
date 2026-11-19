@@ -15,6 +15,7 @@ from typing import NoReturn, cast
 
 try:
     from .delivery_plan_validator import (
+        ACCEPTED_IDENTITIES,
         JSON,
         PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
@@ -23,6 +24,7 @@ try:
     )
 except ImportError:  # Direct script execution.
     from delivery_plan_validator import (
+        ACCEPTED_IDENTITIES,
         JSON,
         PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
@@ -267,7 +269,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
         or value.get("schema_version") != 1
     ):
         _reject("manifest_schema_invalid")
-    if value.get("provider_identity") != PROVIDER_IDENTITY:
+    if value.get("provider_identity") not in ACCEPTED_IDENTITIES:
         _reject("provider_identity_mismatch")
     inputs, packages = value.get("deployment_inputs"), value.get("packages")
     if not isinstance(inputs, dict) or not isinstance(packages, dict):
@@ -298,7 +300,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
             "resource_changes": [],
         },
         value,
-        dict[str, JSON](PROVIDER_IDENTITY),
+        cast(JSON, value["provider_identity"]),
     )
     if contract_result.get("status") != "accepted":
         _reject("mutation_contract_invalid")

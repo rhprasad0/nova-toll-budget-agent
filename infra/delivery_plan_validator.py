@@ -35,6 +35,10 @@ EXPECTED_IDENTITY = MappingProxyType(
         "lock_identity": "V2-AWS60",
     }
 )
+UPGRADE_IDENTITY = dict(
+    EXPECTED_IDENTITY, provider_version="6.73.0", lock_identity="V2-AWS73"
+)
+ACCEPTED_IDENTITIES = (dict(EXPECTED_IDENTITY), UPGRADE_IDENTITY)
 EXPECTED_PROVIDER_NAME = "registry.terraform.io/hashicorp/aws"
 
 PACKAGES = ("agentcore.zip", "chat-proxy.zip", "loader.zip", "publisher.zip")
@@ -1850,7 +1854,7 @@ def _validate_identity(identity: JSON) -> None:
         not _is_string(value) for value in identity.values()
     ):
         _reject("provider_identity_mismatch")
-    if any(identity[key] != EXPECTED_IDENTITY[key] for key in EXPECTED_IDENTITY):
+    if identity not in ACCEPTED_IDENTITIES:
         _reject("provider_identity_mismatch")
 
 
@@ -2794,7 +2798,10 @@ def validate_plan(
             or record["address"] in TRACE_NOTICE_DIGESTS
         ]
         declared, declared_permissions = _parse_manifest(manifest)
-        if cast(dict[str, JSON], manifest).get("provider_identity") != identity:
+        if cast(dict[str, JSON], manifest).get("provider_identity") not in (
+            identity,
+            UPGRADE_IDENTITY,
+        ):
             _reject("provider_identity_mismatch")
         actual_records = [
             record for record in records if not record.get("no_op_evidence")
