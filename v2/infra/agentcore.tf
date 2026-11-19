@@ -17,7 +17,7 @@ locals {
     AGENTCORE_VPCE_URL = "https://${var.foundation.agentcore_vpc_endpoint_dns_name}"
     SESSION_TABLE_NAME = aws_dynamodb_table.tollchat_sessions.name
   }, local.is_production ? {} : { PUBLIC_ORIGINS = local.public_site_url })
-  agentcore_runtime_source_arns = values(local.slot_runtime_arns)
+  agentcore_runtime_source_arns = [for arn in values(local.slot_runtime_arns) : "${arn}*"]
   private_api_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -174,7 +174,7 @@ data "aws_iam_policy_document" "agentcore_assume" {
       values   = [data.aws_caller_identity.current.account_id]
     }
     condition {
-      test     = "ArnEquals"
+      test     = "ArnLike"
       variable = "aws:SourceArn"
       values   = local.agentcore_runtime_source_arns
     }
