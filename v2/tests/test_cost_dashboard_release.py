@@ -482,7 +482,7 @@ def test_provider_plan_and_mutated_authority(tmp_path: Path, environment: str) -
     (tmp_path / "main.tf").write_text(
         """terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "6.60.0" }
+    aws = { source = "hashicorp/aws", version = "6.73.0" }
   }
 }
 """
@@ -884,7 +884,7 @@ def test_provider_report_routes_keep_known_defaults(tmp_path: Path) -> None:
     assert len(blocks) == 2
     source = """terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "6.60.0" }
+    aws = { source = "hashicorp/aws", version = "6.73.0" }
   }
 }
 """

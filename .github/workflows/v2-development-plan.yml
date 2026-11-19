@@ -330,7 +330,7 @@ jobs:
           ' "$FOUNDATION_OUTPUT" >/dev/null 2>"$FOUNDATION_VALIDATE_LOG"
           jq -n --slurpfile foundation "$FOUNDATION_OUTPUT" '{foundation: $foundation[0]}' >"$FOUNDATION_VARS"
           chmod 600 -- "$FOUNDATION_VARS"
-          printf '%s\n' '{"provider":"hashicorp/aws","provider_version":"6.60.0","terraform_version":"1.15.8","lockfile":"v2/infra/.terraform.lock.hcl","lock_identity":"V2-AWS60"}' >"$IDENTITY"
+          printf '%s\n' '{"provider":"hashicorp/aws","provider_version":"6.73.0","terraform_version":"1.15.8","lockfile":"v2/infra/.terraform.lock.hcl","lock_identity":"V2-AWS73"}' >"$IDENTITY"
           chmod 600 -- "$IDENTITY"
 
           terraform -chdir="$GITHUB_WORKSPACE/trusted/v2/infra" init -input=false -lockfile=readonly \
