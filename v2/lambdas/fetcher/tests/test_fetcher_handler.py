@@ -67,7 +67,8 @@ def test_s3_key_rounds_down_to_schedule_tick() -> None:
 def test_s3_key_buckets_never_collide_within_a_feeds_own_tick() -> None:
     """Two polls of one feed inside one tick would overwrite each other, so the
     key's bucket width has to match the rule that drives it."""
-    for feed, extension, tick in (("i95", "csv", 10), ("i66", "xml", 6)):
+    for feed, cfg in handler.FEEDS.items():
+        extension, tick = cfg["extension"], cfg["tick_minutes"]
         base = datetime(2026, 7, 21, 14, 0, tzinfo=UTC)
         keys = {
             handler._s3_key(feed, base.replace(minute=m), extension, tick)

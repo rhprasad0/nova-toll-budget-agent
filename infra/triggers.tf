@@ -1,19 +1,13 @@
 # --- EventBridge tick → toll-fetcher ---------------------------------------
 
 resource "aws_cloudwatch_event_rule" "poll_tick" {
-  name = "toll-poll-tick"
-  # Pinned to the wall clock rather than rate(10 minutes), which anchors to
-  # whenever the rule was created and had drifted to a steady 212s past each
-  # boundary -- 3.5 minutes of pure added staleness on every captured price.
-  # Verified live: VDOT's interval-t payload is ready at the boundary, so
-  # firing at :00 captures interval t, not t-10 (docs/oracle-findings.md §9).
-  schedule_expression = "cron(0/10 * * * ? *)"
+  name                = "toll-poll-tick"
+  schedule_expression = "cron(0/5 * * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "fetcher" {
-  rule = aws_cloudwatch_event_rule.poll_tick.name
-  arn  = aws_lambda_function.fetcher.arn
-  # This rule now carries I-95 only; I-66 has its own, faster rule below.
+  rule  = aws_cloudwatch_event_rule.poll_tick.name
+  arn   = aws_lambda_function.fetcher.arn
   input = jsonencode({ feeds = ["i95"] })
 }
 
