@@ -647,3 +647,32 @@ def test_runtime_blocks_guardrail_content_and_returns_safe_failures(
         "runtime_log_content_omitted" if console_protected else "RuntimeError"
     ) in caplog.text
     assert "secret provider detail" not in caplog.text
+
+
+def test_first_invocation_after_a_snapshot_restore_reseeds_random(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import random
+
+    import agent.agentcore_entrypoint as entrypoint
+
+    monkeypatch.setattr(entrypoint, "_runtime", None)
+
+    def client(*_: object) -> FakeGuardrail:
+        return FakeGuardrail()
+
+    monkeypatch.setattr(entrypoint.boto3, "client", client)
+    monkeypatch.setenv("TOLLCHAT_GUARDRAIL_ID", "guardrail")
+    monkeypatch.setenv("TOLLCHAT_GUARDRAIL_VERSION", "1")
+    random.seed(0)
+    snapshot = random.getrandbits(64)
+    random.seed(0)
+
+    async def run() -> list[dict[str, object]]:
+        events = cast(
+            AsyncIterator[dict[str, object]], vars(entrypoint)["invoke"](None, None)
+        )
+        return [event async for event in events]
+
+    assert asyncio.run(run())[-1]["code"] == "invalid_request"
+    assert random.getrandbits(64) != snapshot

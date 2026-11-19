@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
@@ -325,6 +326,7 @@ _runtime: TollChatRuntime | None = None
 async def invoke(payload: object, context: object) -> AsyncIterator[dict[str, object]]:
     global _runtime
     if _runtime is None:
+        random.seed()
         _runtime = TollChatRuntime(
             build_agent,
             cast(Any, boto3.client("bedrock-runtime")),  # pyright: ignore[reportUnknownMemberType]

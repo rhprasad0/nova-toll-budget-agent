@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from dataclasses import replace
 from importlib.metadata import version
+from random import SystemRandom
 from time import monotonic
 from typing import Protocol, TypedDict, Unpack, cast
 
@@ -27,8 +28,9 @@ from opentelemetry.sdk._logs.export import (
     LogRecordExportResult,
 )
 from opentelemetry.sdk._shared_internal import BatchProcessor
+from opentelemetry.sdk.extension.aws.trace import aws_xray_id_generator
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import Event, ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace import Event, ReadableSpan, TracerProvider, id_generator
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
     SpanExporter,
@@ -447,6 +449,8 @@ def initialize() -> None:
         guardrail_version = os.environ["TOLLCHAT_TELEMETRY_GUARDRAIL_VERSION"]
         if not guardrail_id or not guardrail_version or guardrail_version == "DRAFT":
             raise RuntimeError("missing telemetry guardrail")
+        for module in (id_generator, aws_xray_id_generator):
+            vars(module)["random"] = SystemRandom()
         # One known exporter graph. Do not enable extra service-event/metric pipelines.
         os.environ["AGENT_OBSERVABILITY_ENABLED"] = "true"
         os.environ["OTEL_PYTHON_DISTRO"] = "aws_distro"

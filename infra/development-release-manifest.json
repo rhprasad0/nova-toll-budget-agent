@@ -46,7 +46,7 @@
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f0d0bc0cc574909dc822e8707ae4c72657ec2fbabaf18e788bc7bb0b4160e5ed",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
-    "v2/agent/agentcore_entrypoint.py": "6380ba7e31b0cec80dfa732307ec5924887f0d6b668cd3196ac9de1abf984158",
+    "v2/agent/agentcore_entrypoint.py": "b0eb97aece44b90db7ab89a04decadbeccc796152b977c4e35c0497c1ec1dbcc",
     "v2/agent/assets/LICENSE.txt": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
     "v2/agent/assets/chat-markdown.mjs": "76d3c21d3a0b6f2af17ec86bfcdf082284d229191f10879dd4498fcda2ca930b",
     "v2/agent/assets/chat.css": "00af8ea67002392581a591a2b2e1415582ac113741c6c276e347ace90a9201e8",
@@ -79,7 +79,7 @@
     "v2/agent/public-report-routes.js": "179b0800976e8a700855a73898567e884f73a64fa138a03fb14f87b250f6dedc",
     "v2/agent/public_chat.mjs": "da3d334ef47dab08eebb6c292e8f5413f221bb27242368c759e492666391a021",
     "v2/agent/robots.txt": "16ceb5ee3e0dc13aa9adf31a3ebbe45a1d965b8c2b9f72eaf84e5911e140ed95",
-    "v2/agent/telemetry.py": "2d749d8501c72f4e8ecfe4ac9dfff4bcd457e74718a9b4df23db2ed718aaee2c",
+    "v2/agent/telemetry.py": "0f9659a087525378cef0b5e53de6df0859f628663b39cda2f1be3dd96b017c2c",
     "v2/agent/terms.txt": "8fe686b47200732c6d823a43ae214d9113849f53f2dd9f84e65a82c62f4f46af",
     "v2/agent/toll_agent.py": "885ea00c2c3eb22972c17e911018ee0dc040346f7e8680a625a1def06e533b85",
     "v2/agent_tools/contract-manifest.json": "b606b2d33c6f89887b561e7d0d6855d0ae964ac7185a52055645bcdafb8f194f",
@@ -187,7 +187,7 @@
     "v2/uv.lock": "3d0e8499dd9b2073c66798046337ed9493139ea98e4d2dc913c221a9dbe33df1"
   },
   "packages": {
-    "agentcore.zip": "eb3167c01338e742f2aca5ee4b8ab1b3b063e6de0efc8a3174e9e47b485e2b03",
+    "agentcore.zip": "9499e745c7a9f4fce86cfd37b72276763013a873c90a7ee606fa31324f675234",
     "chat-proxy.zip": "66150b47286b9ee0d8a8d1257c00aa589f26be41ce81c6cd10a1da2b9bd65332",
     "loader.zip": "8cc20381b24f19011e33c13aa037450e93eb3c20a1feadbbf2d88749bb17aaf6",
     "publisher.zip": "acd0e46af7b877b8451a7bca1301ac0e5dc2f19bdde4350c86a884a0b67e98da"

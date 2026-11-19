@@ -303,6 +303,14 @@ with patch.object(telemetry.boto3, "client", return_value=client), patch.object(
         'unsampled-parent-check', context=trace.set_span_in_context(parent)
     ) as span:
         assert span.is_recording() and span.get_span_context().trace_flags.sampled
+    import random
+    restored = []
+    for _ in range(2):
+        random.seed(0)
+        with trace.get_tracer('restore-check').start_as_current_span('root') as span:
+            restored.append(span.get_span_context())
+    assert restored[0].span_id != restored[1].span_id
+    assert restored[0].trace_id != restored[1].trace_id
     for provider in providers:
         provider.shutdown()
 print("protected startup passed")
