@@ -15,7 +15,6 @@ from typing import NoReturn, cast
 
 try:
     from .delivery_plan_validator import (
-        ACCEPTED_IDENTITIES,
         JSON,
         PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
@@ -24,7 +23,6 @@ try:
     )
 except ImportError:  # Direct script execution.
     from delivery_plan_validator import (
-        ACCEPTED_IDENTITIES,
         JSON,
         PACKAGES,
         PRODUCTION_CONTROL_INPUTS,
@@ -43,10 +41,10 @@ MANIFEST_KEYS = {
 }
 PROVIDER_IDENTITY = {
     "provider": "hashicorp/aws",
-    "provider_version": "6.60.0",
+    "provider_version": "6.73.0",
     "terraform_version": "1.15.8",
     "lockfile": "v2/infra/.terraform.lock.hcl",
-    "lock_identity": "V2-AWS60",
+    "lock_identity": "V2-AWS73",
 }
 EXACT_INPUTS = {
     ".github/workflows/v2-development-delivery.yml",
@@ -269,7 +267,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
         or value.get("schema_version") != 1
     ):
         _reject("manifest_schema_invalid")
-    if value.get("provider_identity") not in ACCEPTED_IDENTITIES:
+    if value.get("provider_identity") != PROVIDER_IDENTITY:
         _reject("provider_identity_mismatch")
     inputs, packages = value.get("deployment_inputs"), value.get("packages")
     if not isinstance(inputs, dict) or not isinstance(packages, dict):
@@ -300,7 +298,7 @@ def _validate_manifest(value: JSON) -> tuple[dict[str, str], dict[str, str]]:
             "resource_changes": [],
         },
         value,
-        cast(JSON, value["provider_identity"]),
+        dict[str, JSON](PROVIDER_IDENTITY),
     )
     if contract_result.get("status") != "accepted":
         _reject("mutation_contract_invalid")

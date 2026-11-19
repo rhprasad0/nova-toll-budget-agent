@@ -25,7 +25,6 @@ from infra.delivery_plan_validator import (
     TRACE_PREFIX,
     TRACE_QUERY,
     TRACE_TAGS,
-    UPGRADE_IDENTITY,
 )
 from infra.delivery_plan_validator import (
     validate_plan as _validate_plan,
@@ -3178,29 +3177,6 @@ class DeliveryPlanValidatorTests(unittest.TestCase):
         identity = dict(EXPECTED_IDENTITY)
         identity["terraform_version"] = "1.14.0"
         self.assert_reason("provider_identity_mismatch", identity=identity)
-        self.assert_reason(
-            "provider_identity_mismatch",
-            identity=dict(EXPECTED_IDENTITY, provider_version="6.61.0"),
-        )
-        for identity, manifest_identity, status in (
-            (EXPECTED_IDENTITY, EXPECTED_IDENTITY, "accepted"),
-            (UPGRADE_IDENTITY, UPGRADE_IDENTITY, "accepted"),
-            (EXPECTED_IDENTITY, UPGRADE_IDENTITY, "accepted"),
-            (UPGRADE_IDENTITY, EXPECTED_IDENTITY, "rejected"),
-            (
-                EXPECTED_IDENTITY,
-                dict(EXPECTED_IDENTITY, provider_version="6.61.0"),
-                "rejected",
-            ),
-        ):
-            manifest = lambda_manifest()
-            cast(dict[str, object], manifest)["provider_identity"] = dict(
-                manifest_identity
-            )
-            result = validate_plan(lambda_plan(), manifest, dict(identity))
-            self.assertEqual(result["status"], status)
-            if status == "rejected":
-                self.assertEqual(result["reason_code"], "provider_identity_mismatch")
 
         manifest = lambda_manifest()
         del cast(dict[str, object], manifest)["packages"]

@@ -205,25 +205,6 @@ class ReleaseManifestTests(unittest.TestCase):
         self.assertEqual(first["status"], "accepted")
         self.assertNotIn(SHA, json.dumps(first))
 
-    def test_accepts_each_provider_identity_and_rejects_others(self) -> None:
-        for identity in (
-            {
-                **release_manifest.PROVIDER_IDENTITY,
-                "provider_version": "6.73.0",
-                "lock_identity": "V2-AWS73",
-            },
-            release_manifest.PROVIDER_IDENTITY,
-        ):
-            self.manifest_value["provider_identity"] = dict[str, JSON](identity)
-            self.write_manifest()
-            evidence = self.root / f"{identity['lock_identity']}.json"
-            self.assertEqual(self.verify(write_evidence=evidence)["status"], "accepted")
-        self.manifest_value["provider_identity"] = dict[str, JSON](
-            release_manifest.PROVIDER_IDENTITY, provider_version="6.61.0"
-        )
-        self.write_manifest()
-        self.assert_rejected("provider_identity_mismatch")
-
     def test_rejects_internally_consistent_unreviewed_bundle_payload(self) -> None:
         first = self.verify()
         evidence = self.root / "evidence.json"
