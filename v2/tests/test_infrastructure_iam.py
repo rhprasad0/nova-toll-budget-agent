@@ -1068,13 +1068,13 @@ def test_development_agentcore_execution_trust_is_exact_and_confused_deputy_boun
         for condition in conditions
     )
     assert any(
-        hcl_scalar(condition, "test") == "ArnEquals"
+        hcl_scalar(condition, "test") == "ArnLike"
         and hcl_scalar(condition, "variable") == "aws:SourceArn"
         and hcl_attribute(condition, "values") == "local.agentcore_runtime_source_arns"
         for condition in conditions
     )
     assert re.search(
-        r"agentcore_runtime_source_arns\s*=\s*values\(local.slot_runtime_arns\)",
+        r"agentcore_runtime_source_arns\s*=\s*\[for arn in values\(local.slot_runtime_arns\) : \"\$\{arn\}\*\"\]",
         source,
         re.DOTALL,
     )
