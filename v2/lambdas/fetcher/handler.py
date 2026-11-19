@@ -27,11 +27,8 @@ MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 _DRILL_ID = re.compile(r"[a-f0-9]{16}\Z")
 
 
-# tick_minutes is each feed's own publish cadence, measured against prod rather
-# than assumed: I-95 publishes a new interval every 10 minutes exactly, I-66
-# every 6 with a real 6-minute interval window. They
-# ride separate EventBridge rules in infra/triggers.tf, and this is also the
-# S3 key's bucket size -- keep the two in step or two polls of the same feed
+# tick_minutes is each feed's EventBridge rule cadence in infra/triggers.tf and
+# the S3 key's bucket size -- keep the two in step or two polls of the same feed
 # will floor into one key and overwrite each other.
 class FeedConfig(TypedDict):
     url: str
@@ -70,7 +67,7 @@ FEEDS: dict[str, FeedConfig] = {
         ),
         "token_param_env": "I95_TOKEN_PARAM",
         "extension": "csv",
-        "tick_minutes": 10,
+        "tick_minutes": 5,
     },
     "i66": {
         "url": (
@@ -126,7 +123,7 @@ def _s3_key(
     """Build the tick-rounded raw key, with an optional unique drill suffix.
 
     tick_minutes is the feed's own cadence, so I-66's buckets are 6 minutes
-    wide (…0000Z, 0006Z, 0012Z) and I-95's are 10.
+    wide (…0000Z, 0006Z, 0012Z) and I-95's are 5.
     """
     tick_minute = (now.minute // tick_minutes) * tick_minutes
     tick = now.replace(minute=tick_minute, second=0, microsecond=0)

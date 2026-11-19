@@ -74,7 +74,7 @@ def test_eventbridge_has_both_failure_paths_and_bounded_retries() -> None:
         FOUNDATION_TRIGGERS,
         'resource "aws_s3_bucket_notification" "raw"',
     )
-    assert_assignment(collector, "schedule_expression", '"cron(0/10 * * * ? *)"')
+    assert_assignment(collector, "schedule_expression", '"cron(0/5 * * * ? *)"')
     assert_assignment(raw_notification, "eventbridge", "true")
 
 
