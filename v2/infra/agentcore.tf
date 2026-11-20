@@ -350,6 +350,7 @@ resource "aws_bedrockagentcore_agent_runtime" "tollchat" {
   agent_runtime_name = "nova_toll_v2${local.is_production ? "" : "_development"}${each.key == "blue" ? "" : "_green"}"
   description        = "TollChat v2 pricing agent"
   role_arn           = aws_iam_role.tollchat_runtime.arn
+  platform_version   = "V2"
   depends_on         = [aws_iam_role_policy.tollchat_runtime]
 
   agent_runtime_artifact {
