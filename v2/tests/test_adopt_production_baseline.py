@@ -2084,7 +2084,6 @@ SELECT md5(jsonb_build_object(
     assert after.returncode == 0, after.stderr
     assert after.stdout == before.stdout
 
-    monkeypatch.setattr(runner, "PRODUCTION_MAX_MIGRATION_NUMBER", 37)
     retired = runner.run_production()
     assert retired["before"] == {"pricing": "1.4.0", "oracle": "1.15.2"}
     assert retired["after"] == {"pricing": "1.5.0", "oracle": "1.16.0"}
