@@ -87,12 +87,12 @@ def test_production_migration_gate_matches_cap() -> None:
         )
     schemas, _ = runner._registry()
     migrations: Any = runner._production_migrations(
-        (*runner._migration_candidates(schemas), _migration(number=36))
+        (*runner._migration_candidates(schemas), _migration(number=38))
     )
     assert migrations[-1].path == (
-        "v2/db/migrations/035_upgrade_oracle_1_15_1_to_1_15_2.sql"
+        "v2/db/migrations/037_upgrade_pricing_1_4_0_to_1_5_0.sql"
     )
-    assert all(migration.number <= 35 for migration in migrations)
+    assert all(migration.number <= 37 for migration in migrations)
     versions = {migration.schema: migration.target for migration in migrations}
 
     wrapper = (SCRIPTS / "run_production_migrations_workflow.sh").read_text()
