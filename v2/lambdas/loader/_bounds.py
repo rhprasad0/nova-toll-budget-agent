@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal, InvalidOperation
 
 MAX_ROWS = 1_000
 MAX_FIELD_LENGTH = 256
 MAX_TOLL_USD = Decimal("500.00")
 MAX_IDENTIFIER = 1_000_000
+_ASCII_DIGITS = re.compile(r"[0-9]+")
 
 
 def bounded_text(value: object, field: str) -> str:
@@ -17,7 +19,10 @@ def bounded_text(value: object, field: str) -> str:
 
 
 def bounded_int(value: object, field: str) -> int:
-    parsed = int(bounded_text(value, field))
+    text = bounded_text(value, field)
+    if not _ASCII_DIGITS.fullmatch(text):
+        raise ValueError(f"{field} must be ASCII digits")
+    parsed = int(text)
     if not 0 < parsed <= MAX_IDENTIFIER:
         raise ValueError(f"{field} outside allowed range")
     return parsed

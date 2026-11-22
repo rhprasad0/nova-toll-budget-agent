@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -397,3 +398,51 @@ def test_failed_i95_transaction_emits_no_event(monkeypatch: pytest.MonkeyPatch) 
             _i95_rows(),
             s3_key="raw/feed=i95/date=2026-08-16/1200Z.csv",
         )
+
+
+NON_ASCII_DIGIT_IDS = [
+    " 12 ",
+    "+12",
+    "1_2",
+    "\uff11\uff12",
+    "\u0663",
+    "-12",
+    "",
+    "1.0",
+    "12\n",
+]
+CSV_ID_COLUMNS = {"ODPAIRID": 2, "STARTZONEID": 4, "ENDZONEID": 8, "CORRIDORID": 10}
+XML_ID_ATTRS = ["CorridorID", "StartZoneID", "EndZoneID"]
+
+
+@pytest.mark.parametrize("bad", NON_ASCII_DIGIT_IDS)
+@pytest.mark.parametrize("column", CSV_ID_COLUMNS)
+def test_csv_rejects_ids_that_are_not_plain_ascii_digits(column: str, bad: str) -> None:
+    header = "ZONETOLLRATE,ODPAIRNAME,ODPAIRID,STARTZONENAME,STARTZONEID,INTERVALENDDATETI,CURRENTDATETIME,ENDZONENAME,ENDZONEID,CORRIDORN,CORRIDORID,CALULCATEDDATETIM,LINKSTATUS"
+    fields = [
+        "2.50",
+        "A TO B",
+        "1",
+        "A",
+        "10",
+        "16/08/26 12:00:00",
+        "16/08/26 11:59:00",
+        "B",
+        "20",
+        "I-95",
+        "95",
+        "16/08/26 11:58:00",
+        "OPEN",
+    ]
+    fields[CSV_ID_COLUMNS[column]] = f'"{bad}"'
+    with pytest.raises(ValueError):
+        parse_trip_pricing_csv(header + "\n" + ",".join(fields) + "\n")
+
+
+@pytest.mark.parametrize("bad", [b for b in NON_ASCII_DIGIT_IDS if b != "12\n"])
+@pytest.mark.parametrize("attr", XML_ID_ATTRS)
+def test_xml_rejects_ids_that_are_not_plain_ascii_digits(attr: str, bad: str) -> None:
+    xml = '<root><opt IntervalDateTime="2026-08-16T11:55:00Z" IntervalEndDateTime="2026-08-16T12:00:00Z" CalculatedDateTime="2026-08-16T11:54:00Z" CorridorID="66" CorridorName="I-66" StartZoneID="1" StartZoneName="A" EndZoneID="2" EndZoneName="B" ZoneTollRate="3.50" /></root>'
+    xml = re.sub(f'{attr}="[^"]*"', f'{attr}="{bad}"', xml, count=1)
+    with pytest.raises(ValueError):
+        parse_trip_pricing_xml(xml)
