@@ -181,7 +181,7 @@
     "v2/scripts/run_private_stage.sh": "7557685f176439a393a8b9cfbe3460bf70875dc2fa1a0b16ff5b4ec4dec7f38e",
     "v2/scripts/run_production_migrations.py": "2077cbd16ba4832de6c75f1f113c2f23bb16f1d57a0dcb1615701b2631bb2e5c",
     "v2/scripts/run_production_migrations_workflow.sh": "02f1be90ca405792453152645e7613810d1729203f82044d342a9c4b6e4922ad",
-    "v2/scripts/shared-package-compatibility.json": "ab4a60a362d7c22a5de1d11761807ef412024bf8ba9040c2702b7e51006c4d0a",
+    "v2/scripts/shared-package-compatibility.json": "3f634554f713980c37d362c1f69547fd41b431a308a2a33d7ad3a1c39f478e24",
     "v2/scripts/shared_packages.py": "16247f229569e9e89b81e1a36243e183840a38ba4207a61edf227f1222130331",
     "v2/scripts/verify_release_bundle.py": "a0ff16ce79746979c9653b8c71fac4f12f6ca9475f09ebd289b623e66b8483d1",
     "v2/uv.lock": "3d0e8499dd9b2073c66798046337ed9493139ea98e4d2dc913c221a9dbe33df1"
