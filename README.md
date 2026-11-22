@@ -10,11 +10,11 @@
 
 1. **Intake.** Adding the `factory` label to an issue triggers [a workflow](.github/workflows/factory-dispatch.yml) that starts a managed-agent session for that issue. The issue body and my comments are the spec; other comments are evidence, never requirements.
 2. **Build.** A worker session in a [sandbox](factory/sandbox/) writes an end-to-end test first, confirms it fails for the reported reason, makes the change, runs the checks the sandbox supports, and pushes a branch. [Its definition](factory/agents/worker.md) tells it to choose the likeliest intent where the issue is open and to list each choice as an assumption.
-3. **Review.** A separate [reviewer session](factory/agents/reviewer.md) that has not seen the worker's reasoning checks the branch once. The worker fixes the findings it agrees with and rebuts the rest.
+3. **Grade and review.** A grader reruns the checks in the worker's sandbox against [a rubric](factory/rubrics/worker.md); a branch that misses it stops there. A separate [reviewer session](factory/agents/reviewer.md) that has not seen the worker's reasoning then checks the branch once. The worker fixes the findings it agrees with and rebuts the rest.
 4. **Pull request and CI.** The [dispatcher](factory/dispatch.py) opens the pull request. Required CI, run through one entry point ([`verify.sh`](.github/scripts/verify.sh)), decides whether it can merge. Failing logs go back to the worker as evidence.
 5. **Merge.** I review and merge. The factory never merges, pushes to `main`, or moves tags.
 
-The factory's own nightly [documentation agent](factory/agents/docs.md) fixes Markdown statements the code proves false. Design history is in the [factory plan](v2/plans/FACTORY-PLAN.md) and the earlier [local-runner spec](v2/plans/FACTORY-SPEC.md), which it replaced.
+The factory's own nightly [documentation agent](factory/agents/docs.md) fixes Markdown statements the code proves false. [The factory's README](factory/README.md) explains each piece and run with diagrams. Design history is in the [factory plan](v2/plans/FACTORY-PLAN.md) and the earlier [local-runner spec](v2/plans/FACTORY-SPEC.md), which it replaced.
 
 ## Factory controls
 
@@ -27,7 +27,7 @@ Each row links a claim to its implementation and a way to inspect it. These cont
 | Agent sandboxes reach only an allowlist of hosts | [Egress rules](factory/sandbox/egress.nft) and the [proxy allowlist](factory/proxy/allowlist.py) | [Proxy tests](factory/host/test_proxy.py) and [sandbox spawn tests](factory/host/test_sandbox_spawn.py) | The sandbox is isolated from production credentials; the host holds the GitHub login. |
 | Each role has its own narrow definition | [Worker, reviewer, and docs agents](factory/agents/) | Each definition's `tools` list, applied by [Factory Sync](.github/workflows/factory-sync.yml) | The reviewer reports and cannot push. |
 | One dispatcher admits and sequences work | [Dispatcher](factory/dispatch.py) admits only issues I wrote and labelled, then runs the build, the review, the pull request and the CI rounds | [Dispatcher tests](factory/test_dispatch.py) | One run per issue at a time; a rerun waits until the last run's pull request is closed and its branch deleted. |
-| Every run is visible | The [dispatcher](factory/dispatch.py) reports how each run ended on its issue, linking the worker's and reviewer's sessions and, for a finished run, its cost | [Dispatcher tests](factory/test_dispatch.py) | Records what happened; it does not grade it. |
+| Every run is visible | The [dispatcher](factory/dispatch.py) reports how each run ended on its issue, linking the worker's and reviewer's sessions and, for a finished run, its cost | [Dispatcher tests](factory/test_dispatch.py) | Each run's rubric result is on the issue; the grader sees the sandbox, not the transcript. |
 | Rules are enforced by checks, not prose | [`CLAUDE.md`](CLAUDE.md) lists each rule beside the check that enforces it; [`verify.sh`](.github/scripts/verify.sh) runs them | [Documentation tests](v2/tests/test_documentation.py) | Judgment calls that no check covers go to me. |
 
 **Limits.** A human approves every merge. Review by another model session is a second opinion, not a proof. Checks that need AWS or the deployed app run only in CI.
