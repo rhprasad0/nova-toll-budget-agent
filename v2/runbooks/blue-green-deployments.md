@@ -300,6 +300,17 @@ a fresh persisted/published/rendered evaluation. Save sanitized release/recovery
 evidence and limitations. A failed check holds the next stage; source or state changes
 invalidate earlier plans and require fresh review.
 
+## AgentCore platform version
+
+Both runtime slots set `platform_version` in [agentcore.tf](../infra/agentcore.tf).
+A release cannot change it ([infrastructure_plan.py](../scripts/infrastructure_plan.py)
+rejects it), so an administrator applies the change with a saved plan targeted at
+both runtimes; their endpoints, proxy Lambdas and aliases follow in the same plan.
+On V2 every runtime update builds a snapshot and takes minutes. To roll back, set
+`"V1"` explicitly: omitting the argument keeps the current platform. Everything the
+agent creates at import is shared by every restored session, so keep per-session
+values in the request path.
+
 ## Manual application recovery
 
 Automatic recovery ends with the observation window. For cancellation or runner

@@ -164,3 +164,14 @@ def test_text_matching_infrastructure_assertions_only_shrink() -> None:
         "Assert on the development_plan fixture's planned values instead of "
         "adding assert_assignment or terraform_block text matches."
     )
+
+
+def test_both_runtime_slots_run_on_platform_v2(development_plan: Plan) -> None:
+    assert {
+        address: value["platform_version"]
+        for address, value in development_plan.items()
+        if address.startswith("aws_bedrockagentcore_agent_runtime.tollchat[")
+    } == {
+        'aws_bedrockagentcore_agent_runtime.tollchat["blue"]': "V2",
+        'aws_bedrockagentcore_agent_runtime.tollchat["green"]': "V2",
+    }

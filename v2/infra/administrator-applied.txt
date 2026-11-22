@@ -1,3 +1,5 @@
 # v2/infra addresses an administrator applies by hand, one per line.
 # v2/scripts/infrastructure_plan.py lets a change to these through.
 aws_iam_role.tollchat_runtime
+aws_bedrockagentcore_agent_runtime.tollchat["blue"]
+aws_bedrockagentcore_agent_runtime.tollchat["green"]
