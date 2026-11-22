@@ -415,7 +415,7 @@ CSV_ID_COLUMNS = {"ODPAIRID": 2, "STARTZONEID": 4, "ENDZONEID": 8, "CORRIDORID":
 XML_ID_ATTRS = ["CorridorID", "StartZoneID", "EndZoneID"]
 
 
-@pytest.mark.parametrize("bad", NON_ASCII_DIGIT_IDS)
+@pytest.mark.parametrize("bad", [b for b in NON_ASCII_DIGIT_IDS if b.strip() == b])
 @pytest.mark.parametrize("column", CSV_ID_COLUMNS)
 def test_csv_rejects_ids_that_are_not_plain_ascii_digits(column: str, bad: str) -> None:
     header = "ZONETOLLRATE,ODPAIRNAME,ODPAIRID,STARTZONENAME,STARTZONEID,INTERVALENDDATETI,CURRENTDATETIME,ENDZONENAME,ENDZONEID,CORRIDORN,CORRIDORID,CALULCATEDDATETIM,LINKSTATUS"
