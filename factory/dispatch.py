@@ -156,6 +156,7 @@ FACTORY = Path(__file__).resolve().parent
 LOCK = FACTORY / "claude-lock.json"
 AGENT_KEY = "./agents/worker.md"
 REVIEWER_KEY = "./agents/reviewer.md"
+RUBRIC = FACTORY / "rubrics" / "worker.md"
 ENVIRONMENTS = {
     "read": "./environments/tollchat-box-read.yaml",
     "write": "./environments/tollchat-box-write.yaml",
@@ -483,7 +484,14 @@ def start_session(
         repo=repo,
         issue=issue,
         budget_cents=budget_cents,
-        initial_events=[text_event(kickoff)],
+        initial_events=[
+            {
+                "type": "user.define_outcome",
+                "description": kickoff,
+                "rubric": {"type": "text", "content": RUBRIC.read_text()},
+                "max_iterations": FEEDBACK_ROUNDS,
+            }
+        ],
     )
 
 
@@ -537,6 +545,13 @@ def final_message(client: Sdk, session_id: str) -> str:
         ),
         "",
     )
+
+
+def grade(client: Sdk, session_id: str) -> Sdk:
+    events = client.beta.sessions.events.list(
+        session_id, types=["span.outcome_evaluation_end"], order="desc", limit=1
+    )
+    return next(iter(events), None)
 
 
 def wait_for_checks(
@@ -636,13 +651,21 @@ def report(
     stop: str,
     sessions: list[str],
     extra: list[str],
+    graded: Sdk,
 ) -> str:
     amounts = [cents(run.client.beta.sessions.retrieve(s)) for s in sessions]
+    rubric = graded.result if graded else "not graded"
     lines = [
         f"The factory's session {session_link(run.session_id)} {status}.",
         "",
-        f"Outcome: **{result}** · stop reason: `{stop}` · cost: {dollars(amounts)}",
+        f"Outcome: **{result}** · rubric: `{rubric}` · stop reason: `{stop}` · cost: {dollars(amounts)}",
     ]
+    if graded and rubric != "satisfied" and graded.explanation:
+        extra = [
+            *extra,
+            "",
+            f"<details><summary>Grader's explanation</summary>\n\n{clip(graded.explanation)}\n\n</details>",
+        ]
     return "\n".join(lines + extra)
 
 
@@ -706,12 +729,13 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
         interrupt(run.client, run.session_id)
         return f"The factory interrupted session {session_link(run.session_id)} after {minutes} minutes.\n\nOutcome: **blocked**"
     stop = idle.stop_reason.type if idle else "terminated"
+    graded = grade(run.client, run.session_id)
     head = run.github.branch_head(branch)
     sessions = [run.session_id]
     extra: list[str] = []
 
     def done(result: str, status: str) -> str:
-        return report(run, status, result, stop, sessions, extra)
+        return report(run, status, result, stop, sessions, extra, graded)
 
     if stop != "end_turn":
         return done(
@@ -719,6 +743,17 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
             "stopped before it finished"
             if head is None
             else f"stopped and left branch `{branch}`",
+        )
+    rubric = graded.result if graded else "not graded"
+    if rubric != "satisfied":
+        if head is None:
+            extra += ["", clip(final_message(run.client, run.session_id))]
+            return done(
+                "flawed",
+                f"pushed no branch and missed the rubric (`{rubric}`); its last message follows",
+            )
+        return done(
+            "flawed", f"left branch `{branch}`; it missed the rubric (`{rubric}`)"
         )
     if head is None:
         extra += ["", clip(final_message(run.client, run.session_id))]

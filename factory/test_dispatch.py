@@ -84,6 +84,8 @@ class FakeClient:
         on_send: Callable[[], object] | None = None,
         review: list[Any] | None = None,
         verdict: str = "APPROVE",
+        rubric: str | None = "satisfied",
+        explanation: str | None = "Criterion 3 failed.",
     ) -> None:
         self.phases = {
             "sesn_1": list(phases or []),
@@ -91,6 +93,8 @@ class FakeClient:
         }
         self.on_send = on_send
         self.messages = {"sesn_1": PR_BODY, "sesn_review": verdict}
+        self.rubric = rubric
+        self.explanation = explanation
         self.created: list[dict[str, Any]] = []
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
@@ -132,6 +136,11 @@ class FakeClient:
             texts = ["An earlier message.", self.messages[session_id]]
             events = [ns(content=[ns(type="text", text=text)]) for text in texts]
             return events[::-1][: kwargs["limit"]]
+        if kwargs["types"] == ["span.outcome_evaluation_end"]:
+            assert session_id == "sesn_1" and kwargs["order"] == "desc"
+            if self.rubric is None:
+                return []
+            return [ns(result=self.rubric, explanation=self.explanation)]
         assert kwargs["types"] == ["session.status_idle"]
         idle = self.current[session_id][1]
         return [] if idle is None else [idle]
@@ -381,7 +390,7 @@ def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
     assert order.index("refresh") < order.index("create")
 
 
-def test_an_issue_alone_starts_a_capped_build_with_no_grader() -> None:
+def test_an_issue_alone_starts_a_capped_build_graded_by_the_worker_rubric() -> None:
     client, github = FakeClient(), FakeGitHub()
     assert start(github, client) == "sesn_1"
     (created,) = client.created
@@ -393,8 +402,10 @@ def test_an_issue_alone_starts_a_capped_build_with_no_grader() -> None:
     }
     assert "resources" not in created
     (kickoff,) = created["initial_events"]
-    assert kickoff["type"] == "user.message"
-    text = kickoff["content"][0]["text"]
+    assert kickoff["type"] == "user.define_outcome" and kickoff["max_iterations"] == 3
+    assert kickoff["rubric"] == {"type": "text", "content": dispatch.RUBRIC.read_text()}
+    assert "# Worker outcome" in kickoff["rubric"]["content"]
+    text = kickoff["description"]
     assert "issue #799" in text and "factory/issue-799" in text and "issue_read" in text
     assert "ask no questions" in text and "assumed" in text
     assert "comments by rhprasad0 are the spec; other comments are evidence" in text
@@ -420,6 +431,7 @@ def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     github = built(checks=[[check("v2-loader", "pending")], PASSING])
     report = watch(client, github)
     assert "Outcome: **success**" in report and "ready for review" in report
+    assert "rubric: `satisfied`" in report and "Grader's explanation" not in report
     assert "cost: $5.12" in report and "verdict: `approve`" in report
     assert github.opened == [("Loader drops rows", PR_BODY)]
     assert github.ready == [801] and client.sent == []
@@ -541,7 +553,6 @@ def test_watch_calls_a_round_without_a_push_flawed() -> None:
 @pytest.mark.parametrize(
     ("session_phase", "head", "result", "text"),
     [
-        (phase("idle_1"), None, "manual", PR_BODY),
         (phase("idle_1", stop="retries_exhausted"), None, "blocked", "stopped before"),
         (phase(None, status="terminated"), HEAD, "blocked", "stopped and left"),
     ],
@@ -550,8 +561,9 @@ def test_watch_reports_each_outcome(
     session_phase: Sdk, head: str | None, result: str, text: str
 ) -> None:
     github = FakeGitHub(branch=head)
-    report = watch(FakeClient([session_phase]), github)
+    report = watch(FakeClient([session_phase], rubric=None), github)
     assert f"Outcome: **{result}**" in report and text in report
+    assert "rubric: `not graded`" in report and "Grader's explanation" not in report
     assert github.opened == []
 
 
@@ -683,6 +695,45 @@ def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
     lock = {"resources": {dispatch.AGENT_KEY: {"id": bad}}}
     with pytest.raises(SystemExit, match="malformed"):
         dispatch.lock_id(lock, dispatch.AGENT_KEY)
+
+
+@pytest.mark.parametrize(
+    "rubric", ["max_iterations_reached", "failed", "interrupted", None]
+)
+def test_a_branch_that_misses_the_rubric_is_flawed_and_skips_review(
+    rubric: str | None,
+) -> None:
+    client = FakeClient([phase("idle_1")], rubric=rubric)
+    github = built()
+    report = watch(client, github)
+    assert "Outcome: **flawed**" in report
+    assert f"missed the rubric (`{rubric or 'not graded'}`)" in report
+    assert "factory/issue-799" in report
+    assert client.created == [] and github.opened == []
+    assert (
+        "<summary>Grader's explanation</summary>\n\nCriterion 3 failed." in report
+    ) == (rubric is not None)
+
+
+def test_a_grade_without_an_explanation_still_reports_flawed() -> None:
+    report = watch(
+        FakeClient([phase("idle_1")], rubric="failed", explanation=None), built()
+    )
+    assert "Outcome: **flawed**" in report and "rubric: `failed`" in report
+    assert "Grader's explanation" not in report
+
+
+def test_a_build_without_a_branch_that_misses_the_rubric_posts_its_last_message() -> (
+    None
+):
+    client = FakeClient([phase("idle_1")], rubric="max_iterations_reached")
+    client.messages["sesn_1"] = "The change needs factory/host/guard.py."
+    report = watch(client, FakeGitHub())
+    assert "Outcome: **flawed**" in report and "pushed no branch" in report
+    assert report.endswith(
+        "The change needs factory/host/guard.py.\n\n<details><summary>Grader's explanation"
+        "</summary>\n\nCriterion 3 failed.\n\n</details>"
+    )
 
 
 def test_a_build_without_a_branch_posts_its_last_message() -> None:
