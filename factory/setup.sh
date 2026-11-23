@@ -23,9 +23,6 @@ if [[ ! -f "$state/rds-ca.pem" ]]; then
   mv "$state/rds-ca.pem.new" "$state/rds-ca.pem"
 fi
 
-docker pull -q postgis/postgis:17-3.5 >/dev/null
-docker build -q -t factory-agent:dev -f agent/Dockerfile --target factory \
-  --build-context "certs=$state/certs" .. >/dev/null
 CLAUDE_CODE_OAUTH_TOKEN="$(AWS_PROFILE=factory aws ssm get-parameter \
   --name /nova-toll/factory/claude-code-oauth-token --with-decryption \
   --query Parameter.Value --output text)"

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from factory.host import dispatcher, guard
+from factory.host import guard
 
-CONFIG = dispatcher.CHECKOUT / ".gitleaks.toml"
+CONFIG = Path(__file__).resolve().parents[2] / ".gitleaks.toml"
 FAKE_TOKEN = "ghp_" + "Zq3Xv8Lr2Tn6Wb4Yc1Hd9Kf5Mj7Pa0Se2Ug4"
 
 

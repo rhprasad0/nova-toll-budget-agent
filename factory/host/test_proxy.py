@@ -11,11 +11,12 @@ import shutil
 import subprocess
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from factory.host import dispatcher
+FACTORY = Path(__file__).resolve().parents[1]
 
 MITMPROXY = "mitmproxy/mitmproxy:12.2.3"
 TOKEN = "test-token-not-a-credential"
@@ -204,9 +205,7 @@ def results() -> Iterator[dict[str, Any]]:
             pytest.fail("the factory job needs Docker for the proxy checks")
         pytest.skip("needs Docker")
     tag = f"factory-proxy-test-{uuid.uuid4().hex[:8]}"
-    docker(
-        "build", "--quiet", "--tag", f"{tag}:test", str(dispatcher.FACTORY / "proxy")
-    )
+    docker("build", "--quiet", "--tag", f"{tag}:test", str(FACTORY / "proxy"))
     docker("network", "create", "--internal", tag)
     aliases = ["api.anthropic.com", "pypi.org", "github.com", "api.github.com", "evil"]
     aliases += ["truststore.pki.rds.amazonaws.com", "registry-1.docker.io"]
@@ -247,7 +246,7 @@ def results() -> Iterator[dict[str, Any]]:
 
 def proxy_command() -> list[str]:
     """The proxy's command exactly as compose.yaml runs it."""
-    text = (dispatcher.FACTORY / "compose.yaml").read_text()
+    text = (FACTORY / "compose.yaml").read_text()
     block = re.search(r"    command:\n((?:      - .+\n)+)", text)
     assert block
     return [line.strip()[2:] for line in block.group(1).splitlines()]
@@ -264,7 +263,7 @@ def sandbox_env() -> list[str]:
 
 def sandbox_proxy_command() -> list[str]:
     """The sandbox proxies' command exactly as sandbox/compose.yaml runs it."""
-    text = (dispatcher.FACTORY / "sandbox/compose.yaml").read_text()
+    text = (FACTORY / "sandbox/compose.yaml").read_text()
     block = re.search(r"  command:\n((?:    - .+\n)+)", text)
     assert block
     return [line.strip()[2:] for line in block.group(1).splitlines()]

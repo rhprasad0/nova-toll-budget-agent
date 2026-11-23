@@ -3,9 +3,9 @@ import re
 import subprocess
 from pathlib import Path
 
-from factory.host import dispatcher
+FACTORY = Path(__file__).resolve().parents[1]
 
-COMPOSE = dispatcher.FACTORY / "compose.yaml"
+COMPOSE = FACTORY / "compose.yaml"
 ENV = {
     "FACTORY_TRUST_ANCHOR_ARN": "arn:aws:rolesanywhere:us-east-1:111122223333:trust-anchor/example",
     "FACTORY_PROFILE_ARN": "arn:aws:rolesanywhere:us-east-1:111122223333:profile/example",
@@ -24,7 +24,7 @@ def image(service: str) -> str:
 
 
 def test_collector_config_validates_with_the_pinned_image() -> None:
-    config = dispatcher.FACTORY / "collector/config.yaml"
+    config = FACTORY / "collector/config.yaml"
     result = subprocess.run(
         ["docker", "run", "--rm", "--env", "FACTORY_TRACES_BUCKET=example",
          "--env", f"COLLECTOR_CONFIG={config.read_text()}",

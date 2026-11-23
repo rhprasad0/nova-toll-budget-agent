@@ -43,22 +43,3 @@ ENV PATH="/home/agent/.local/bin:${PATH}" \
     DISABLE_AUTOUPDATER=1 \
     CHECKPOINT_DISABLE=1
 WORKDIR /work
-
-FROM toolchain AS factory
-
-USER root
-COPY --from=certs mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/factory-mitm.crt
-RUN update-ca-certificates
-COPY factory/agent/run-verify.sh factory/agent/prepare-work.sh /usr/local/bin/
-
-USER agent
-ENV HTTPS_PROXY=http://proxy:8080 \
-    HTTP_PROXY=http://proxy:8080 \
-    NO_PROXY=localhost,127.0.0.1,proxy \
-    https_proxy=http://proxy:8080 \
-    http_proxy=http://proxy:8080 \
-    no_proxy=localhost,127.0.0.1,proxy \
-    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
-    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
-    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
-    UV_SYSTEM_CERTS=1

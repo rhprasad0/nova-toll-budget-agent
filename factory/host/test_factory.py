@@ -1,31 +1,11 @@
-"""Checks that need no Docker: the image matches CI, and the sandbox keeps its shape.
+"""Checks that need no Docker: the toolchain image and the proxy allowlists keep their shape."""
 
-The end-to-end check is `dispatcher.py verify` on the factory machine (FACTORY-PLAN, Stage 3).
-"""
-
-import re
 from pathlib import Path
 
 import yaml
 
-from factory.host import dispatcher as factory
-
-ROOT = factory.CHECKOUT
-DOCKERFILE = (factory.FACTORY / "agent/Dockerfile").read_text()
-
-
-def arg(name: str) -> str:
-    match = re.search(rf"^ARG {name}=(\S+)$", DOCKERFILE, re.MULTILINE)
-    assert match, name
-    return match.group(1)
-
-
-def test_published_toolchain_target_carries_no_factory_proxy() -> None:
-    toolchain, factory_stage = DOCKERFILE.split("\nFROM toolchain AS factory\n")
-    toolchain = toolchain.split("\nFROM debian:trixie-slim AS toolchain\n", 1)[1]
-    for box_only in ("proxy", "--from=certs", "run-verify.sh", "prepare-work.sh"):
-        assert box_only not in toolchain, box_only
-        assert box_only in factory_stage, box_only
+FACTORY = Path(__file__).resolve().parents[1]
+ROOT = FACTORY.parent
 
 
 def test_only_main_publishes_the_toolchain_image_with_provenance() -> None:
@@ -51,33 +31,9 @@ def test_only_main_publishes_the_toolchain_image_with_provenance() -> None:
     assert all("login" not in step.get("run", "") for step in build_steps)
 
 
-def test_sandbox_reaches_out_only_through_the_shared_namespace() -> None:
-    args = factory.sandbox_args("wo", 983)
-    assert args[args.index("--network") + 1] == "container:wo-db"
-    assert "host" not in args
-    assert args[args.index("--cap-drop") + 1] == "ALL"
-    mounts = [
-        args[i + 1] for i, a in enumerate(args) if a in {"--volume", "-v", "--mount"}
-    ]
-    assert mounts == ["/var/run/docker.sock:/var/run/docker.sock"]
-    assert "--privileged" not in args
-
-
-def test_databases_share_one_namespace_on_the_internal_network() -> None:
-    candidate = factory.database_args("wo")
-    assert candidate[candidate.index("--network") + 1] == factory.NETWORK
-    assert candidate[-1] == factory.POSTGIS
-    retained = factory.retained_database_args("wo")
-    assert retained[retained.index("--network") + 1] == "container:wo-db"
-    assert "PGPORT=5433" in retained
-    assert {f"{factory.LABEL}=wo"} <= set(candidate) & set(retained) & set(
-        factory.sandbox_args("wo", 0)
-    )
-
-
 def test_proxy_allowlist_has_no_wildcards_and_github_only_by_path() -> None:
     paths: dict[str, list[str]] = {}
-    for line in (factory.FACTORY / "proxy/allowlist.txt").read_text().splitlines():
+    for line in (FACTORY / "proxy/allowlist.txt").read_text().splitlines():
         if line.strip() and not line.startswith("#"):
             host, _, path = line.strip().partition("/")
             paths.setdefault(host, []).append(path)
@@ -91,7 +47,7 @@ def test_proxy_allowlist_has_no_wildcards_and_github_only_by_path() -> None:
 
 def test_sandbox_allowlist_reaches_the_worker_api_but_not_inference() -> None:
     hosts: dict[str, list[str]] = {}
-    lines = (factory.FACTORY / "proxy/sandbox-allowlist.txt").read_text().splitlines()
+    lines = (FACTORY / "proxy/sandbox-allowlist.txt").read_text().splitlines()
     for line in lines:
         if line.strip() and not line.startswith("#"):
             host, _, path = line.split()[0].partition("/")
@@ -104,8 +60,3 @@ def test_sandbox_allowlist_reaches_the_worker_api_but_not_inference() -> None:
     ]
     assert not [host for host in hosts if "*" in host]
     assert "" not in hosts["github.com"] and "" not in hosts["api.github.com"]
-
-
-def test_verify_script_comes_from_this_checkout() -> None:
-    assert (Path(factory.CHECKOUT) / ".github/scripts/verify.sh").is_file()
-    assert "/work/in/verify.sh" in (factory.FACTORY / "agent/run-verify.sh").read_text()
