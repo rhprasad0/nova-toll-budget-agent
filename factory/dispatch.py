@@ -658,13 +658,16 @@ def report(
     sessions: list[str],
     extra: list[str],
     graded: Sdk,
+    reviews: list[str],
 ) -> str:
     amounts = [cents(run.client.beta.sessions.retrieve(s)) for s in sessions]
     rubric = graded.result if graded else "not graded"
+    used = f" · reviews: {len(reviews)} of {REVIEW_ROUNDS}" if reviews else ""
     lines = [
         f"The factory's session {session_link(run.session_id)} {status}.",
         "",
-        f"Outcome: **{result}** · rubric: `{rubric}` · stop reason: `{stop}` · cost: {dollars(amounts)}",
+        f"Outcome: **{result}** · rubric: `{rubric}`{used} · stop reason: `{stop}` · cost: {dollars(amounts)}",
+        *(["", *reviews] if reviews else []),
     ]
     if graded and rubric != "satisfied" and graded.explanation:
         extra = [
@@ -742,16 +745,7 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
     extra: list[str] = []
 
     def done(result: str, status: str) -> str:
-        used = ["", f"Reviews used: {len(reviews)} of {REVIEW_ROUNDS}", *reviews]
-        return report(
-            run,
-            status,
-            result,
-            stop,
-            sessions,
-            (used if reviews else []) + extra,
-            graded,
-        )
+        return report(run, status, result, stop, sessions, extra, graded, reviews)
 
     def draft(body: str) -> dict[str, Any]:
         title = run.github.issue(run.issue)["title"]
@@ -767,7 +761,9 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
             else f"stopped and left branch `{branch}`",
         )
     rubric = graded.result if graded else "not graded"
-    if rubric == BLOCKED_GRADE:
+    if rubric == BLOCKED_GRADE and final_message(run.client, run.session_id).startswith(
+        "Blocked:"
+    ):
         if head is None:
             extra += ["", clip(final_message(run.client, run.session_id))]
             return done(
@@ -866,9 +862,10 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
         body = final_message(run.client, run.session_id)
         pushed = run.github.branch_head(branch)
         if pushed == head:
-            reviews.append(
-                "The worker pushed nothing for the findings; its body rebuts them."
-            )
+            extra += [
+                "",
+                "The worker pushed nothing for the findings; its body rebuts them.",
+            ]
             break
         head = pushed
 

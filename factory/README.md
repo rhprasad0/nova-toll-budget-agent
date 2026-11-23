@@ -116,7 +116,7 @@ flowchart TD
   review -- no --> blocked
   review -- BLOCKED --> blocked2
   review -- "changes requested after 3 reviews" --> flawed3["flawed<br/>draft pull request"]
-  review -- approved, or no push --> ci{required CI}
+  review -- "approved, or no push" --> ci{required CI}
   ci -- passes --> success[success]
   ci -- "still failing after the last round,<br/>or the worker pushed no fix" --> flawed2[flawed]
   ci -- "PR closed" --> manual

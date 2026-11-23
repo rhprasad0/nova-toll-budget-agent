@@ -436,7 +436,7 @@ def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:
     report = watch(client, github)
     assert "Outcome: **success**" in report and "ready for review" in report
     assert "rubric: `satisfied`" in report and "Grader's explanation" not in report
-    assert "cost: $5.12" in report and "Reviews used: 1 of 3" in report
+    assert "cost: $5.12" in report and "reviews: 1 of 3 ·" in report
     assert "1. session [`sesn_review_1`]" in report and "verdict: `approve`" in report
     assert github.opened == [("Loader drops rows", PR_BODY)]
     assert github.ready == [801] and client.sent == []
@@ -471,7 +471,7 @@ def test_review_findings_go_back_until_the_third_reviewer_approves() -> None:
     )
     client.on_send = reworked(github, client)
     report = watch(client, github)
-    assert "Outcome: **success**" in report and "Reviews used: 3 of 3" in report
+    assert "Outcome: **success**" in report and "reviews: 3 of 3 ·" in report
     assert "2. session [`sesn_review_2`]" in report
     assert "3. session [`sesn_review_3`]" in report and "verdict: `approve`" in report
     assert [message for _, message in client.sent] == [
@@ -496,8 +496,7 @@ def test_findings_still_open_after_three_reviews_leave_a_flawed_draft() -> None:
     report = watch(client, github)
     assert "Outcome: **flawed**" in report and "after 3 reviews" in report
     assert (
-        "opened draft https://github.com/" in report
-        and "Reviews used: 3 of 3" in report
+        "opened draft https://github.com/" in report and "reviews: 3 of 3 ·" in report
     )
     assert len(client.sent) == 2 and len(client.created) == 3
     ((_, body),) = github.opened
@@ -522,11 +521,14 @@ def test_a_grader_that_finds_the_run_blocked_leaves_a_draft_and_skips_review() -
     client = FakeClient(
         [phase("idle_1")], rubric="failed", explanation="Needs a baseline move."
     )
+    client.messages["sesn_1"] = f"Blocked: move the baseline.\n\n{PR_BODY}"
     report = watch(client, github)
     assert "Outcome: **blocked**" in report and "rubric: `failed`" in report
     assert "opened draft" in report and "the grader found" in report
     assert "<summary>Grader's explanation</summary>\n\nNeeds a baseline move." in report
-    assert client.created == [] and github.opened == [("Loader drops rows", PR_BODY)]
+    ((title, body),) = github.opened
+    assert title == "Loader drops rows" and "Blocked: move the baseline." in body
+    assert client.created == []
     assert github.polls == 0
 
 
@@ -547,6 +549,7 @@ def test_a_worker_that_rebuts_every_finding_still_gets_its_pr() -> None:
     )
     report = watch(client, github)
     assert "Outcome: **success**" in report and "pushed nothing" in report
+    assert "reviews: 1 of 3 ·" in report
     ((_, body),) = github.opened
     assert "1. x" in body
 
@@ -777,7 +780,7 @@ def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
 
 
 @pytest.mark.parametrize(
-    "rubric", ["max_iterations_reached", "needs_revision", "interrupted", None]
+    "rubric", ["max_iterations_reached", "failed", "interrupted", None]
 )
 def test_a_branch_that_misses_the_rubric_is_flawed_and_skips_review(
     rubric: str | None,
