@@ -1,23 +1,25 @@
 #!/bin/sh
 set -eu
 ini=/tmp/pgbouncer.ini
+: "${RELAY_USER:?}" "${RELAY_PORT:?}" "${RELAY_CONNECTIONS:?}"
+printf '"%s" ""\n' "$RELAY_USER" >/tmp/userlist.txt
 
 render() {
   token="$(aws rds generate-db-auth-token --region us-east-1 --hostname "$FACTORY_RDS_HOST" \
-    --port 5432 --username factory_sandbox)"
+    --port 5432 --username "$RELAY_USER")"
   umask 077
   cat >"$ini.new" <<EOF
 [databases]
-factory_sandbox = host=$FACTORY_RDS_HOST port=5432 dbname=factory_sandbox user=factory_sandbox password='$token'
+factory_sandbox = host=$FACTORY_RDS_HOST port=5432 dbname=factory_sandbox user=$RELAY_USER password='$token'
 
 [pgbouncer]
 listen_addr = 0.0.0.0
-listen_port = 6432
+listen_port = $RELAY_PORT
 unix_socket_dir =
 auth_type = trust
-auth_file = /etc/pgbouncer/userlist.txt
+auth_file = /tmp/userlist.txt
 pool_mode = session
-max_db_connections = 15
+max_db_connections = $RELAY_CONNECTIONS
 max_client_conn = 100
 server_tls_sslmode = verify-full
 server_tls_ca_file = /rds/rds-ca.pem
