@@ -47,6 +47,7 @@ services:
     ports:
       - 127.0.0.1:6006:6006
       - 127.0.0.1:4318:4318
+      - 10.249.0.1:15432:6432
     extra_hosts:
       - "${FACTORY_RDS_HOST:?}=${FACTORY_RDS_ADDR:?}"
     restart: unless-stopped
@@ -85,6 +86,18 @@ services:
       PHOENIX_TELEMETRY_ENABLED: "false"
       PHOENIX_ENABLE_MCP_SERVER: "false"
       PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: "30"
+    volumes:
+      - ${HOME}/.local/state/factory/rds-ca.pem:/rds/rds-ca.pem:ro
+    restart: unless-stopped
+
+  relay:
+    build: ./relay
+    image: factory-relay:dev
+    network_mode: service:trace-netns
+    depends_on: [trace-netns, aws-credentials]
+    environment:
+      FACTORY_RDS_HOST: ${FACTORY_RDS_HOST:?}
+      AWS_EC2_METADATA_SERVICE_ENDPOINT: http://127.0.0.1:9911
     volumes:
       - ${HOME}/.local/state/factory/rds-ca.pem:/rds/rds-ca.pem:ro
     restart: unless-stopped
