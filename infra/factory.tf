@@ -7,7 +7,7 @@ locals {
   factory_certificate_cn  = "factory"
   factory_token_parameter = "/nova-toll/factory/claude-code-oauth-token"
   factory_database_user   = "phoenix_factory"
-  factory_sandbox_user    = "factory_sandbox"
+  factory_sandbox_users   = ["factory_sandbox", "factory_sandbox_reader"]
 }
 
 resource "aws_rolesanywhere_trust_anchor" "factory" {
@@ -97,7 +97,7 @@ data "aws_iam_policy_document" "factory" {
   statement {
     sid       = "ConnectFactoryDatabases"
     actions   = ["rds-db:connect"]
-    resources = [for user in [local.factory_database_user, local.factory_sandbox_user] : "arn:aws:rds-db:us-east-1:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"]
+    resources = [for user in concat([local.factory_database_user], local.factory_sandbox_users) : "arn:aws:rds-db:us-east-1:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"]
   }
 }
 

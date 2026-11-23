@@ -128,8 +128,12 @@ for user in "${!ports[@]}"; do
   umask 077
   printf 'FACTORY_PROXY=%s\nHTTPS_PROXY=%s\nNO_PROXY=localhost,127.0.0.1\nANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\n' \
     "$proxy" "$proxy" "$id" "$key" >"$environment"
-  [[ "$user" == factory-write ]] &&
-    echo "FACTORY_SANDBOX_DATABASE_URL=postgresql://factory_sandbox@10.249.0.1:15432/factory_sandbox" >>"$environment"
+  if [[ "$user" == factory-write ]]; then
+    database_url=postgresql://factory_sandbox@10.249.0.1:15432/factory_sandbox
+  else
+    database_url=postgresql://factory_sandbox_reader@10.249.0.1:15433/factory_sandbox
+  fi
+  echo "FACTORY_SANDBOX_DATABASE_URL=$database_url" >>"$environment"
   umask 022
   chmod 600 "$environment"
   sed -e "s/@USER@/$user/g" -e "s/@UID@/$uid/g" "$here/systemd/factory-worker.service.in" \

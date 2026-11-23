@@ -23,7 +23,12 @@ ROLES = [
     "CREATE DATABASE factory_sandbox OWNER factory_sandbox",
     "CREATE ROLE phoenix_factory LOGIN",
     "CREATE DATABASE phoenix OWNER phoenix_factory",
+    "CREATE ROLE factory_sandbox_reader LOGIN",
 ]
+RELAYS = {
+    "relay": ("factory_sandbox", "6432", "15"),
+    "relay-read": ("factory_sandbox_reader", "6433", "5"),
+}
 
 
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -76,23 +81,34 @@ def relay(tmp_path: Path) -> Iterator[str]:
             "factory-relay:test",
             str(dispatcher.FACTORY / "relay"),
         )
-        docker("create", "--name", name, "--network", name, "--network-alias", "relay",
-               "--env", f"FACTORY_RDS_HOST={RDS_HOST}",
-               "--env", "AWS_ACCESS_KEY_ID=AKIAEXAMPLEEXAMPLE", "--env", "AWS_SECRET_ACCESS_KEY=example",
-               "factory-relay:test")  # fmt: skip
-        docker("cp", str(tmp_path / "rds"), f"{name}:/rds")
-        docker("start", name)
-        until(client(name, "factory_sandbox", "factory_sandbox", "select 1"), name)
+        for alias, (user, port, connections) in RELAYS.items():
+            container = f"{name}-{alias}"
+            docker("create", "--name", container, "--network", name, "--network-alias", alias,
+                   "--env", f"FACTORY_RDS_HOST={RDS_HOST}", "--env", f"RELAY_USER={user}",
+                   "--env", f"RELAY_PORT={port}", "--env", f"RELAY_CONNECTIONS={connections}",
+                   "--env", "AWS_ACCESS_KEY_ID=AKIAEXAMPLEEXAMPLE", "--env", "AWS_SECRET_ACCESS_KEY=example",
+                   "factory-relay:test")  # fmt: skip
+            docker("cp", str(tmp_path / "rds"), f"{container}:/rds")
+            docker("start", container)
+            until(client(name, user, "factory_sandbox", "select 1", alias), container)
         yield name
     finally:
-        docker("rm", "--force", name, f"{name}-rds", check=False)
+        docker(
+            "rm",
+            "--force",
+            *(f"{name}-{alias}" for alias in RELAYS),
+            f"{name}-rds",
+            check=False,
+        )
         docker("network", "rm", name, check=False)
 
 
-def client(name: str, user: str, database: str, sql: str) -> list[str]:
+def client(
+    name: str, user: str, database: str, sql: str, alias: str = "relay"
+) -> list[str]:
     return ["run", "--rm", "--network", name, "--env", "PGCONNECT_TIMEOUT=5", POSTGRES,
-            "psql", "-X", "-At", "-h", "relay", "-p", "6432", "-U", user, "-d", database,
-            "-c", sql]  # fmt: skip
+            "psql", "-X", "-At", "-h", alias, "-p", RELAYS[alias][1], "-U", user,
+            "-d", database, "-c", sql]  # fmt: skip
 
 
 def test_relay_pins_the_sandbox_login_over_verified_tls(relay: str) -> None:
@@ -110,7 +126,7 @@ def test_relay_pins_the_sandbox_login_over_verified_tls(relay: str) -> None:
             *client(relay, "factory_sandbox", database, "select 1"), check=False
         )
         assert other.returncode != 0 and "no such database" in other.stderr
-    assert "X-Amz-Signature" not in docker("logs", relay).stderr
+    assert "X-Amz-Signature" not in docker("logs", f"{relay}-relay").stderr
 
 
 def test_relay_queues_clients_beyond_its_upstream_cap(relay: str) -> None:
@@ -127,3 +143,21 @@ def test_relay_queues_clients_beyond_its_upstream_cap(relay: str) -> None:
         "select count(*) from pg_stat_activity where usename = 'factory_sandbox'")  # fmt: skip
     assert 0 < int(upstream.stdout) <= 15
     assert burst.communicate(timeout=60)[0].strip() == "done"
+
+
+def test_read_relay_serves_only_the_reader(relay: str) -> None:
+    reader = docker(
+        *client(
+            relay,
+            "factory_sandbox_reader",
+            "factory_sandbox",
+            "select current_user",
+            "relay-read",
+        )
+    )
+    assert reader.stdout.strip() == "factory_sandbox_reader"
+    writer = docker(
+        *client(relay, "factory_sandbox", "factory_sandbox", "select 1", "relay-read"),
+        check=False,
+    )
+    assert writer.returncode != 0 and "authentication failed" in writer.stderr

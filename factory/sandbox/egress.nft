@@ -22,6 +22,7 @@ table inet factory_sandbox {
   chain output {
     type filter hook output priority filter; policy accept;
     meta skuid @read ct original ip daddr 10.249.0.1 ct original proto-dst 18080 accept
+    meta skuid @read ct original ip daddr 10.249.0.1 ct original proto-dst 15433 accept
     meta skuid @write ct original ip daddr 10.249.0.1 ct original proto-dst 18081 accept
     meta skuid @write ct original ip daddr 10.249.0.1 ct original proto-dst 15432 accept
     meta skuid @read counter reject
