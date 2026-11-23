@@ -7,33 +7,33 @@
     "./agents/docs.md": {
       "kind": "agent",
       "id": "agent_01N8SxzRnREt1Rzsu6LCRzPD",
-      "version": "4",
-      "hash": "479a4bf83bf723339bc0e45e0b22b14b",
-      "remote_hash": "3da61615b04bfe7eca93b02d304bc4ad",
-      "stamp": "4"
+      "version": "5",
+      "hash": "5613d14d50218218699b82ea058c8caa",
+      "remote_hash": "30a2d5677cb177f6a34524c3fdfd9653",
+      "stamp": "5"
     },
     "./agents/reviewer.md": {
       "kind": "agent",
       "id": "agent_011ssC4G41v97wCzCAjg8iQU",
-      "version": "5",
-      "hash": "3cecc70aea8229bcf80fea47f5b9baaf",
-      "remote_hash": "468a1b76ca2e3c88b588b28c5bc9af8c",
-      "stamp": "5"
+      "version": "6",
+      "hash": "955b1dd9a886304a7af8fa3051ff9df1",
+      "remote_hash": "a239e719b35dc1953a3c99715ebc7938",
+      "stamp": "6"
     },
     "./agents/worker.md": {
       "kind": "agent",
       "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
-      "version": "9",
-      "hash": "c0739ae448ad8140c7b0b5bbb1434c2f",
-      "remote_hash": "2e1f772f36b449b6263c85f7a7267e9f",
-      "stamp": "9"
+      "version": "10",
+      "hash": "cc6ec85022667d4bb5d79645e8fd975c",
+      "remote_hash": "c2741da1f879517dfd1aabc58fd5084f",
+      "stamp": "10"
     },
     "./deployments/docs.yaml": {
       "kind": "deployment",
       "id": "depl_01K3PwTB9u29yFfz9tAJKPfp",
-      "hash": "533b9434afd2756065531fd7883374ed",
-      "remote_hash": "533b9434afd2756065531fd7883374ed",
-      "stamp": "2026-11-18T21:35:03.757568Z"
+      "hash": "9c2429db6bdd91016036c246e71a4e62",
+      "remote_hash": "9c2429db6bdd91016036c246e71a4e62",
+      "stamp": "2026-11-23T16:47:42.170057Z"
     },
     "./environments/tollchat-box-read.yaml": {
       "kind": "environment",
