@@ -17,7 +17,11 @@ def bounded_text(value: object, field: str) -> str:
 
 
 def bounded_int(value: object, field: str) -> int:
-    parsed = int(bounded_text(value, field))
+    text = bounded_text(value, field)
+    # int() also accepts whitespace, signs, underscores and non-ASCII digits.
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(f"{field} must be plain ASCII digits")
+    parsed = int(text)
     if not 0 < parsed <= MAX_IDENTIFIER:
         raise ValueError(f"{field} outside allowed range")
     return parsed
