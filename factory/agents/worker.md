@@ -39,6 +39,16 @@ Read the issue the kickoff message names with `issue_read`, including every comm
 - Ryan reads your final message, often from a phone, and sees nothing else of this sandbox. Make every final message complete on its own, and never point to a path outside the repository.
 - Never print `GH_TOKEN` or any credential.
 
+## Shared database
+
+`FACTORY_SANDBOX_DATABASE_URL` reaches the `factory_sandbox` database on the development RDS instance, PostgreSQL 17, through a relay on the factory box that signs in for you, so the URL needs no password. Use it only when the issue asks, such as for experiments against real infrastructure or a dashboard's backend. Everything else, including every test, keeps using the disposable databases the bootstrap report describes, because CI cannot reach the shared one.
+
+- You own this database and nothing else on the instance. You cannot create roles, databases or untrusted extensions such as `postgis` or `vector`. If the work needs one, that is a `Blocked:` step for Ryan.
+- It persists across work orders and other sessions use it. Work in a schema named `issue_<number>` for your issue, and do not touch other schemas.
+- Drop what you created before you end your turn unless the issue says to keep it, and show in the pull request body that it is gone.
+- At most 15 connections reach the database at once, shared by every session, and the rest wait.
+- Put the real output from the shared database in the pull request body. The reviewer can read the database but not write to it, so it cannot rerun anything that writes, and nothing is left to read once you clean up.
+
 ## Build
 
 Work on the branch the kickoff names. Write an end-to-end test first and confirm it fails for the reason the issue reports. Make the change, run the checks the bootstrap report says this sandbox can run for the areas you changed, commit as the kickoff says, and push the branch. Do not open a pull request.

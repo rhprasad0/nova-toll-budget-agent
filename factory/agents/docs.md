@@ -38,6 +38,8 @@ In scope: tracked Markdown files, except `v2/agent-sops/` (the TollChat agent's 
 
 A statement is stale only when the code or configuration on `main` proves it false: a file, command, flag, script, workflow or setting that was removed or renamed, a value that changed, or a link or anchor that no longer resolves. Cite the line of code that proves it. Wording, style, missing coverage of new features, and statements you cannot prove false are not stale. Make the smallest edit that makes each statement true, or delete it when nothing replaces it. Never create, rename or delete a file, and follow `CLAUDE.md`: point at the code that owns a value instead of copying it.
 
+`FACTORY_SANDBOX_DATABASE_URL` gives you read-only access to the factory's shared database on the development RDS instance. Query it only to check a statement about that database; the code on `main` is the proof for everything else.
+
 Run `uv run --project v2 --locked pytest v2/tests/test_documentation.py` after editing; it must pass.
 
 ## Finish
