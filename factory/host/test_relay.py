@@ -32,10 +32,12 @@ def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     )
 
 
-def until(probe: list[str]) -> None:
+def until(probe: list[str], container: str) -> None:
     for _ in range(60):
         if docker(*probe, check=False).returncode == 0:
             return
+        state = docker("inspect", "--format", "{{.State.Running}}", container)
+        assert state.stdout.strip() == "true", docker("logs", container).stderr
         time.sleep(1)
     raise AssertionError(f"never ready: {probe}")
 
@@ -59,12 +61,14 @@ def relay(tmp_path: Path) -> Iterator[str]:
                 "postgres",
                 "-c",
                 "select 1",
-            ]
+            ],
+            f"{name}-rds",
         )
         docker("exec", f"{name}-rds", "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
                *(arg for sql in ROLES for arg in ("-c", sql)))  # fmt: skip
-        docker("cp", f"{name}-rds:/tmp/cert", str(tmp_path / "rds-ca.pem"))
-        (tmp_path / "rds-ca.pem").chmod(0o644)
+        (tmp_path / "rds").mkdir()
+        docker("cp", f"{name}-rds:/tmp/cert", str(tmp_path / "rds/rds-ca.pem"))
+        (tmp_path / "rds/rds-ca.pem").chmod(0o644)
         docker(
             "build",
             "--quiet",
@@ -72,12 +76,13 @@ def relay(tmp_path: Path) -> Iterator[str]:
             "factory-relay:test",
             str(dispatcher.FACTORY / "relay"),
         )
-        docker("run", "--detach", "--name", name, "--network", name, "--network-alias", "relay",
+        docker("create", "--name", name, "--network", name, "--network-alias", "relay",
                "--env", f"FACTORY_RDS_HOST={RDS_HOST}",
                "--env", "AWS_ACCESS_KEY_ID=AKIAEXAMPLEEXAMPLE", "--env", "AWS_SECRET_ACCESS_KEY=example",
-               "--volume", f"{tmp_path / 'rds-ca.pem'}:/rds/rds-ca.pem:ro",
                "factory-relay:test")  # fmt: skip
-        until(client(name, "factory_sandbox", "factory_sandbox", "select 1"))
+        docker("cp", str(tmp_path / "rds"), f"{name}:/rds")
+        docker("start", name)
+        until(client(name, "factory_sandbox", "factory_sandbox", "select 1"), name)
         yield name
     finally:
         docker("rm", "--force", name, f"{name}-rds", check=False)
