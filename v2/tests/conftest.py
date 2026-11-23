@@ -3,10 +3,15 @@
 import json
 import shutil
 import subprocess
+import sys
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY))
 
 # GitHub's runners ship these; a bare image does not, and the tests that shell out
 # to them fail far from the cause. Gitleaks, Docker and psql are optional: their
