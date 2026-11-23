@@ -121,6 +121,18 @@ def test_phoenix_reads_secrets_from_ssm_and_checks_the_rds_bundle(
     )
 
 
+def test_factory_connects_only_to_its_own_databases(
+    foundation_development_plan: Plan,
+) -> None:
+    policy = foundation_development_plan["data.aws_iam_policy_document.factory[0]"]
+    statements = {item["sid"]: item for item in policy["statement"]}
+    assert statements["ConnectFactoryDatabases"]["actions"] == ["rds-db:connect"]
+    assert set(statements["ConnectFactoryDatabases"]["resources"]) == {
+        "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/phoenix_factory",
+        "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/factory_sandbox",
+    }
+
+
 def test_phoenix_network_admits_only_cloudfront_and_reaches_only_https_and_rds(
     foundation_development_plan: Plan,
 ) -> None:
