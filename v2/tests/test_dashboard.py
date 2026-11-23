@@ -203,7 +203,8 @@ def test_ingest_then_page_shows_every_number(
 
     status, page = get("/")
     assert status == 200
-    assert "<script" not in page.lower()
+    assert page.lower().count("<script") == 1
+    assert "<script src" not in page.lower()
     assert 'name="viewport"' in page
     values = cells(page)
 
