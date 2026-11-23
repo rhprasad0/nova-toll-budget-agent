@@ -29,6 +29,7 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
         "ANTHROPIC_ENVIRONMENT_ID": "env_1",
         "ANTHROPIC_ENVIRONMENT_KEY": "environment-key",
         "ANTHROPIC_API_KEY": "must-not-reach-the-sandbox",
+        "FACTORY_SANDBOX_DATABASE_URL": "postgresql://factory_sandbox@10.249.0.1:15432/factory_sandbox",
     }
     subprocess.run(
         [str(SPAWN)],
@@ -56,6 +57,7 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
     assert "ANTHROPIC_API_KEY" not in " ".join(passed)
     assert "HTTPS_PROXY=http://10.249.0.1:18081" in passed
     assert "GH_TOKEN=replaced-by-the-proxy" in passed
+    assert "FACTORY_SANDBOX_DATABASE_URL" in passed
     assert "DISPOSABLE_DOCKER_NETWORK=container:work-work_1" in passed
     assert "POSTGRES_CONTAINER_ID=work-work_1-postgres" in passed
     removals = [
