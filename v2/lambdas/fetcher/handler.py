@@ -108,8 +108,6 @@ def _load_token(feed: str) -> str:
 
 def _scrub(text: str, token: str) -> str:
     """Strip a token value out of a string before it can reach a log/exception."""
-    # Encoded forms first: a raw token such as "%" is a substring of its own
-    # encoding ("%25"), so replacing it first would leave the rest exposed.
     for form in (
         urllib.parse.quote(token, safe=""),
         urllib.parse.quote_plus(token),
