@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, TypedDict, cast
@@ -107,7 +108,15 @@ def _load_token(feed: str) -> str:
 
 def _scrub(text: str, token: str) -> str:
     """Strip a token value out of a string before it can reach a log/exception."""
-    return text.replace(token, "***")
+    # Encoded forms first: a raw token such as "%" is a substring of its own
+    # encoding ("%25"), so replacing it first would leave the rest exposed.
+    for form in (
+        urllib.parse.quote(token, safe=""),
+        urllib.parse.quote_plus(token),
+        token,
+    ):
+        text = text.replace(form, "***")
+    return text
 
 
 def _s3_key(
@@ -136,7 +145,7 @@ def _fetch_feed(feed: str, url: str, token: str) -> bytes:
     Any exception raised out of here has the token scrubbed from its text —
     urllib exceptions can otherwise echo the request URL verbatim.
     """
-    full_url = f"{url}?token={token}"
+    full_url = f"{url}?{urllib.parse.urlencode({'token': token}, quote_via=urllib.parse.quote)}"
     try:
         with urllib.request.urlopen(full_url, timeout=TIMEOUT_SECONDS) as resp:
             body = resp.read(MAX_RESPONSE_BYTES + 1)

@@ -2,6 +2,7 @@ import io
 import logging
 import traceback
 import urllib.error
+import urllib.parse
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -91,6 +92,46 @@ def test_fetch_feed_scrubs_token_from_exception_text(
 
     assert TOKEN_I95 not in str(exc_info.value)
     assert "***" in str(exc_info.value)
+
+
+AWKWARD_TOKEN = "a&b+c#d%e f"
+
+
+def test_fetch_feed_encodes_token_as_query_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+
+    def fake_urlopen(url: str, timeout: float | None = None) -> io.BytesIO:
+        seen.append(url)
+        return io.BytesIO(b"ok")
+
+    monkeypatch.setattr(handler.urllib.request, "urlopen", fake_urlopen)
+    handler._fetch_feed("i95", "https://example.com/feed", AWKWARD_TOKEN)
+
+    parsed = urllib.parse.urlsplit(seen[0])
+    assert urllib.parse.parse_qs(parsed.query, strict_parsing=True) == {
+        "token": [AWKWARD_TOKEN]
+    }
+    assert parsed.fragment == ""
+
+
+def test_fetch_feed_error_hides_raw_and_encoded_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_urlopen(url: str, timeout: float | None = None) -> None:
+        raise urllib.error.URLError(f"refused {url}")
+
+    monkeypatch.setattr(handler.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        handler._fetch_feed("i95", "https://example.com/feed", AWKWARD_TOKEN)
+
+    message = str(exc_info.value)
+    assert AWKWARD_TOKEN not in message
+    assert urllib.parse.quote(AWKWARD_TOKEN, safe="") not in message
+    assert urllib.parse.quote_plus(AWKWARD_TOKEN) not in message
+    assert "***" in message
 
 
 def test_fetch_feed_enforces_5mb_cap(monkeypatch: pytest.MonkeyPatch) -> None:
