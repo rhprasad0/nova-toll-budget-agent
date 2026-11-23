@@ -1,6 +1,6 @@
 # The factory
 
-The factory turns a GitHub issue into a pull request. Ryan labels an issue `factory`; a worker agent builds it on a branch in a sandbox, a grader checks the branch against a rubric, a separate reviewer checks it again, the dispatcher opens the pull request and feeds failing CI back to the worker, and Ryan merges. The factory never merges, pushes to `main`, or moves tags.
+The factory turns a GitHub issue into a pull request. Ryan labels an issue `factory`; a worker agent builds it on a branch in a sandbox, a grader checks the branch against a rubric, a separate reviewer checks it again for up to three rounds, the dispatcher opens the pull request and feeds failing CI back to the worker, and Ryan merges. The factory never merges, pushes to `main`, or moves tags.
 
 The agents run on Claude Managed Agents. Their tools run in self-hosted sandboxes on a small machine at home, the factory box. GitHub Actions runs the dispatcher.
 
@@ -25,10 +25,10 @@ flowchart TB
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| Dispatcher | [`dispatch.py`](dispatch.py), run by [`factory-dispatch.yml`](../.github/workflows/factory-dispatch.yml) | Admits the issue, starts the worker session, waits for it, runs the reviewer, opens the pull request, runs CI feedback rounds, and posts the outcome on the issue. |
+| Dispatcher | [`dispatch.py`](dispatch.py), run by [`factory-dispatch.yml`](../.github/workflows/factory-dispatch.yml) | Admits the issue, starts the worker session, waits for it, runs up to three review rounds, opens the pull request, runs CI feedback rounds, and posts the outcome on the issue. |
 | Worker | [`agents/worker.md`](agents/worker.md) | Writes a failing end-to-end test, makes the change, runs what the sandbox can of CI, pushes a branch, and returns the pull request body. |
 | Rubric | [`rubrics/worker.md`](rubrics/worker.md) | What the grader checks before review. |
-| Reviewer | [`agents/reviewer.md`](agents/reviewer.md) | Checks the branch against the issue and `CLAUDE.md` from a session that has not seen the worker's reasoning; reports `APPROVE` or `CHANGES REQUESTED` and changes nothing. |
+| Reviewer | [`agents/reviewer.md`](agents/reviewer.md) | Checks the branch against the issue and `CLAUDE.md` from a session that has not seen the worker's reasoning; reports `APPROVE`, `CHANGES REQUESTED` or `BLOCKED` and changes nothing. |
 | Docs agent | [`agents/docs.md`](agents/docs.md), scheduled by [`deployments/docs.yaml`](deployments/docs.yaml) | Runs nightly on `main` and opens one pull request when the code proves a Markdown statement false. Keeps notes between nights in [a memory store](memory_stores/docs.yaml). |
 | Environments | [`environments/`](environments/) | Two self-hosted sandboxes: `tollchat-box-write` for the worker, `tollchat-box-read` for the reviewer and docs agent. |
 | Sandbox | [`sandbox/`](sandbox/) | On the factory box, a poller per slot takes work from Managed Agents and [`spawn.sh`](sandbox/spawn.sh) starts one container per session from the [toolchain image](sandbox/Dockerfile), with a fresh clone and two disposable PostGIS databases. |
@@ -61,14 +61,18 @@ sequenceDiagram
     G-->>W: unmet criteria, if any
   end
   D->>D: read the last outcome evaluation
-  alt not satisfied
+  alt failed: a step only Ryan can take
+    D->>GH: open draft pull request, blocked
+  else not satisfied
     D->>D: flawed, keep the grader's explanation
   else satisfied
-    D->>R: review request
-    R-->>D: APPROVE or CHANGES REQUESTED
-    opt changes requested
-      D->>W: findings
-      W-->>D: fixes pushed, updated body
+    loop up to 3 reviews
+      D->>R: review request + current body
+      R-->>D: APPROVE, CHANGES REQUESTED or BLOCKED
+      opt changes requested, before the third review
+        D->>W: findings
+        W-->>D: fixes pushed, updated body
+      end
     end
     D->>GH: open draft pull request
     loop up to 3 CI rounds
@@ -82,8 +86,8 @@ sequenceDiagram
 
 1. **Admission.** [`admission_problem`](dispatch.py) starts a run only for an open issue that Ryan wrote and labeled, with no open pull request and no existing `factory/issue-<n>` branch. Otherwise the dispatcher says why on the issue and removes the label. The [issue template](../.github/ISSUE_TEMPLATE/factory.md) shows what a buildable issue looks like.
 2. **Build.** [`start_session`](dispatch.py) starts the worker with a `user.define_outcome` event: the kickoff message is the task and [the rubric](rubrics/worker.md) is how it is graded. The worker reads the issue, writes a test that fails, makes the change, pushes, and ends its turn with the pull request body, which it also writes to `/mnt/session/outputs/pr-body.md`.
-3. **Grade.** When the worker ends its turn, Managed Agents runs a grader in the worker's own sandbox. The grader sees the task, the rubric and the sandbox, not the transcript, so every criterion is something it can rerun or read: the pushed branch, the test both ways, `verify.sh quick`, the guard's protected paths, and `pr-body.md`. Unmet criteria go back to the worker, up to the dispatcher's `FEEDBACK_ROUNDS`. The session stays running until the grading ends, so the dispatcher's wait already covers it.
-4. **Review.** A reviewer session in the read sandbox checks the branch. If it requests changes, the worker gets the findings once, fixes what it agrees with, and rebuts the rest in the body.
+3. **Grade.** When the worker ends its turn, Managed Agents runs a grader in the worker's own sandbox. The grader sees the task, the rubric and the sandbox, not the transcript, so every criterion is something it can rerun or read: the pushed branch, the test both ways, `verify.sh quick`, the guard's protected paths, and `pr-body.md`. Unmet criteria go back to the worker, up to the dispatcher's `FEEDBACK_ROUNDS`. The session stays running until the grading ends, so the dispatcher's wait already covers it. When the worker's body starts with a `Blocked:` line naming a step only Ryan can take, the rubric tells the grader to return `failed`, which the dispatcher reports as `blocked`, opening a draft pull request without review.
+4. **Review.** A reviewer session in the read sandbox reads the branch and the worker's body; the grader has already run the checks. If it requests changes, the worker fixes what it agrees with, rebuts the rest in the body and pushes, and a fresh reviewer checks the new head, up to `REVIEW_ROUNDS` reviews. Findings still open after the last review end `flawed`, and a `BLOCKED` verdict ends `blocked`; both open a draft pull request with the findings and skip CI. A round where the worker pushes nothing ends review and goes on to CI.
 5. **Pull request and CI.** The dispatcher opens a draft pull request from the worker's final message, adding `Closes #<n>`. While required checks fail, it sends the failing logs to the worker, up to `FEEDBACK_ROUNDS` times. When they pass it marks the pull request ready.
 6. **Report.** The dispatcher posts the outcome as a new comment, deletes its "started" comment, removes the label, and Ryan reviews.
 
@@ -104,12 +108,15 @@ flowchart TD
   start([worker session stops]) --> ended{ended its turn?}
   ended -- "no, or ran out of time" --> blocked[blocked]
   ended -- yes --> graded{rubric satisfied?}
+  graded -- "failed: needs Ryan" --> blocked2["blocked<br/>draft pull request"]
   graded -- no --> flawed1["flawed<br/>grader's explanation attached"]
   graded -- yes --> branch{branch pushed?}
   branch -- no --> manual["manual<br/>worker's last message attached"]
   branch -- yes --> review{reviewer finished with a verdict?}
   review -- no --> blocked
-  review -- yes --> ci{required CI}
+  review -- BLOCKED --> blocked2
+  review -- "changes requested after 3 reviews" --> flawed3["flawed<br/>draft pull request"]
+  review -- approved, or no push --> ci{required CI}
   ci -- passes --> success[success]
   ci -- "still failing after the last round,<br/>or the worker pushed no fix" --> flawed2[flawed]
   ci -- "PR closed" --> manual
@@ -119,8 +126,8 @@ flowchart TD
 | Outcome | Meaning | What to do |
 | --- | --- | --- |
 | `success` | The rubric was satisfied, the reviewer finished and required CI passes. The only outcome that needs Ryan's review. | Review the pull request as deeply as its Assessment's review depth says. |
-| `flawed` | The agent produced the wrong thing: it missed the rubric or could not make CI pass. | Read the grader's explanation or the CI rounds, then fix the issue, the prompt or the rubric and rerun. |
-| `blocked` | Something outside the agent stopped it: time ran out, a session stopped early, or the reviewer gave no verdict. | Check the linked sessions and the workflow run. |
+| `flawed` | The agent produced the wrong thing: it missed the rubric, left review findings open after the last review, or could not make CI pass. | Read the grader's explanation, the findings or the CI rounds, then fix the issue, the prompt or the rubric and rerun. |
+| `blocked` | Something outside the agent stopped it: the grader or the reviewer found a step only Ryan can take, time ran out, a session stopped early, or the reviewer gave no verdict. | Take the named step on the draft pull request, or check the linked sessions and the workflow run. |
 | `manual` | A deliberate stop for a human, such as a closed pull request. | Decide what happens next. |
 
 ## Rerunning an issue

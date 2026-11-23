@@ -9,3 +9,5 @@ The agent built one GitHub issue of rhprasad0/nova-toll-budget-agent on a branch
 5. No path in `git diff --name-only origin/main...HEAD` is protected: `cd factory/host && python3 -c "import sys; from guard import protected; print([p for p in sys.argv[1:] if protected(p)])" <paths>` prints `[]`.
 6. No message in `git log origin/main..HEAD` puts close, fix or resolve, in any form, before an issue number.
 7. /mnt/session/outputs/pr-body.md exists and has: what changed and why; an `Assumptions` section; the test's output before and after the change; a `Verified:` line whose commands match what you could rerun; a `Not verified:` line; and one `Assessment` giving Fit, Evidence, Risk and Review depth.
+
+If pr-body.md starts with a `Blocked:` line, decide whether the step it names is one only rhprasad0 can take outside this sandbox, such as moving the shared-package baseline that the CI development plan's `shared_compatibility` check needs. If it is, and every other criterion holds, the rubric does not apply to these deliverables: return `failed` with the step in the explanation. If the agent could take the step itself, the line is an unmet criterion.
