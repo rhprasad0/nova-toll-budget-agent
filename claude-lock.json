@@ -15,18 +15,18 @@
     "./agents/reviewer.md": {
       "kind": "agent",
       "id": "agent_011ssC4G41v97wCzCAjg8iQU",
-      "version": "4",
-      "hash": "3f8f2357867f07b96b7d161eb63ed510",
-      "remote_hash": "4698d022b26ef75ca04b51f40a5e30af",
-      "stamp": "4"
+      "version": "5",
+      "hash": "3cecc70aea8229bcf80fea47f5b9baaf",
+      "remote_hash": "468a1b76ca2e3c88b588b28c5bc9af8c",
+      "stamp": "5"
     },
     "./agents/worker.md": {
       "kind": "agent",
       "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
-      "version": "8",
-      "hash": "cea78f75da2a99c0f5819a8e79981d76",
-      "remote_hash": "e5de1c2f8e9ca4053ce7e11775bfdaea",
-      "stamp": "8"
+      "version": "9",
+      "hash": "c0739ae448ad8140c7b0b5bbb1434c2f",
+      "remote_hash": "2e1f772f36b449b6263c85f7a7267e9f",
+      "stamp": "9"
     },
     "./deployments/docs.yaml": {
       "kind": "deployment",
