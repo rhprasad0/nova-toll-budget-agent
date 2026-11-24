@@ -70,7 +70,7 @@ variable "factory_dashboard_package_path" {
 variable "factory_dashboard_domain_ready" {
   description = "Serve factory.tollchat.ai once its ACM certificate is issued."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "factory_alarm_app" {
