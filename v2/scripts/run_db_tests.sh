@@ -1164,4 +1164,5 @@ uv run --project v2 pytest \
   v2/tests/test_development_migrations.py::test_psql_include_path_opens_exact_file \
   v2/tests/test_database_e2e.py \
   v2/lambdas/loader/tests/test_loader_database.py \
+  v2/tests/test_dashboard.py \
   -m live -q

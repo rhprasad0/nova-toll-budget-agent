@@ -2328,6 +2328,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pyyaml" },
@@ -2350,6 +2351,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.15.4" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.0" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.3" },

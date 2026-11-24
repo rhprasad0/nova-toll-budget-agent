@@ -94,7 +94,7 @@ data "aws_iam_policy_document" "alerts_kms" {
     condition {
       test     = "StringEquals"
       variable = "kms:EncryptionContext:aws:sns:topicArn"
-      values   = ["arn:aws:sns:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:nova-toll-alerts"]
+      values   = [for topic in ["nova-toll-alerts", "factory-dashboard-alarms"] : "arn:aws:sns:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:${topic}"]
     }
   }
 }

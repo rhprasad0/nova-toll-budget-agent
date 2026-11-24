@@ -3,10 +3,15 @@
 import json
 import shutil
 import subprocess
+import sys
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY))
 
 # GitHub's runners ship these; a bare image does not, and the tests that shell out
 # to them fail far from the cause. Gitleaks, Docker and psql are optional: their
@@ -51,6 +56,8 @@ variables {
   environment               = "development"
   budget_notification_email = "budget@example.com"
   fetcher_package_path      = "tests/fetcher.zip"
+  factory_dashboard_package_path = "tests/fetcher.zip"
+  factory_alarm_app              = { client_id = "Iv23client", slug = "tollchat-alarms" }
 }
 run "development" {
   command = plan
