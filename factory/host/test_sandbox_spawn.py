@@ -3,10 +3,10 @@ import os
 import subprocess
 from pathlib import Path
 
-from factory.host import dispatcher
+FACTORY = Path(__file__).resolve().parents[1]
 
-SPAWN = dispatcher.FACTORY / "sandbox/spawn.sh"
-CLEAN = dispatcher.FACTORY / "sandbox/clean.sh"
+SPAWN = FACTORY / "sandbox/spawn.sh"
+CLEAN = FACTORY / "sandbox/clean.sh"
 
 
 def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(

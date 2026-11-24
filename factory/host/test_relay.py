@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from factory.host import dispatcher
+FACTORY = Path(__file__).resolve().parents[1]
 
 POSTGRES = "postgis/postgis:17-3.5"
 RDS_HOST = "db.example.us-east-1.rds.amazonaws.com"
@@ -79,7 +79,7 @@ def relay(tmp_path: Path) -> Iterator[str]:
             "--quiet",
             "--tag",
             "factory-relay:test",
-            str(dispatcher.FACTORY / "relay"),
+            str(FACTORY / "relay"),
         )
         for alias, (user, port, connections) in RELAYS.items():
             container = f"{name}-{alias}"

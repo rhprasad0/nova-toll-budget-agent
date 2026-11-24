@@ -138,4 +138,4 @@ Delete the `factory/issue-<n>` branch, close any open pull request for the issue
 
 The guard protects all of `factory/`, so changes here go through an ordinary pull request, never the factory itself. When one merges, Factory Sync updates the agents, environments, vaults, memory stores and deployments it changed; the dispatcher and rubric are read from `main` on each run.
 
-`factory/host/` also holds the earlier local runner from [the factory spec](../v2/plans/FACTORY-SPEC.md) (inbox, poller, runner, work order and dashboard), and [`compose.yaml`](compose.yaml) its trace stack. The factory box does not run the poller or runner; [`guard.py`](host/guard.py) is the part every run depends on.
+[`compose.yaml`](compose.yaml) runs the factory box's trace stack and database relays; [`guard.py`](host/guard.py) is the part every run depends on.
