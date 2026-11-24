@@ -43,7 +43,7 @@
     "infra/tailscale.tf": "5eeec806383e6e7524aa839d65cc10e30ac7323971a654ca19ee0f3da9e5e287",
     "infra/telemetry.tf": "38dc4053aa4380d42dd294b2a71a99b9b90b8df67c327ab8beb008ca11305117",
     "infra/triggers.tf": "fd08ed6e5d60595fbf449da0c36f970fcfabbde65d3632f590e0ba78598cfe8e",
-    "infra/variables.tf": "b1e8b70c1394a039831a4801cc21148cd37a94ae39e652602abf8083592690c3",
+    "infra/variables.tf": "a57ca95b53893ed9c441cee4ca0225a214716a7513393d2502be24c84b59839d",
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f0d0bc0cc574909dc822e8707ae4c72657ec2fbabaf18e788bc7bb0b4160e5ed",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",

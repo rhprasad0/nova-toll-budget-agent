@@ -82,7 +82,10 @@ def test_the_site_is_cloudfront_over_a_signed_function_url(
     (behavior,) = distribution["default_cache_behavior"]
     assert behavior["allowed_methods"] == ["GET", "HEAD"]
     assert behavior["viewer_protocol_policy"] == "redirect-to-https"
-    assert distribution["aliases"] == []
+    assert distribution["aliases"] == ["factory.tollchat.ai"]
+    (certificate,) = distribution["viewer_certificate"]
+    assert certificate["ssl_support_method"] == "sni-only"
+    assert certificate["minimum_protocol_version"] == "TLSv1.2_2021"
     policy = plan["aws_cloudfront_cache_policy.factory_dashboard[0]"]
     (key,) = policy["parameters_in_cache_key_and_forwarded_to_origin"]
     assert key["headers_config"] == [{"header_behavior": "none", "headers": []}]
