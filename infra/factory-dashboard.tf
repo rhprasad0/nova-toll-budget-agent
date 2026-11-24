@@ -10,7 +10,6 @@ locals {
   factory_dashboard_rds_user_arn      = "arn:aws:rds-db:us-east-1:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}"
   factory_dashboard_functions         = { ingest = "factory-dashboard-ingest", web = "factory-dashboard-web", issues = "factory-alarm-issues" }
   factory_dashboard_database_users    = { ingest = local.factory_sandbox_users[0], web = local.factory_sandbox_users[1] }
-  factory_dashboard_cache_policy      = "4cc15a8a-d715-48a4-82b8-cc0b614638fe"
   factory_dashboard_origin_req_policy = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
 }
 
@@ -145,6 +144,10 @@ resource "aws_lambda_function" "factory_dashboard" {
       condition     = var.factory_dashboard_package_path != ""
       error_message = "Build the package with dashboard/build_lambda_zip.sh and pass factory_dashboard_package_path=build/factory-dashboard.zip."
     }
+    precondition {
+      condition     = each.key != "issues" || var.factory_alarm_app.client_id != ""
+      error_message = "Pass factory_alarm_app.client_id, the tollchat-alarms GitHub App's client ID."
+    }
   }
 
   depends_on = [aws_cloudwatch_log_group.factory_dashboard, aws_iam_role_policy_attachment.factory_dashboard]
@@ -191,6 +194,30 @@ resource "aws_cloudfront_origin_access_control" "factory_dashboard" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_cache_policy" "factory_dashboard" {
+  count       = local.factory_dashboard_count
+  name        = "factory-dashboard"
+  min_ttl     = 0
+  default_ttl = 0
+  max_ttl     = 300
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+    headers_config {
+      header_behavior = "none"
+    }
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    query_strings_config {
+      query_string_behavior = "whitelist"
+      query_strings {
+        items = ["range"]
+      }
+    }
+  }
+}
+
 resource "aws_acm_certificate" "factory_dashboard" {
   count             = local.factory_dashboard_count
   domain_name       = local.factory_dashboard_domain
@@ -223,7 +250,7 @@ resource "aws_cloudfront_distribution" "factory_dashboard" {
     target_origin_id         = "web"
     viewer_protocol_policy   = "redirect-to-https"
     compress                 = true
-    cache_policy_id          = local.factory_dashboard_cache_policy
+    cache_policy_id          = aws_cloudfront_cache_policy.factory_dashboard[0].id
     origin_request_policy_id = local.factory_dashboard_origin_req_policy
   }
 
@@ -292,6 +319,7 @@ locals {
       threshold   = 1
       comparison  = "GreaterThanOrEqualToThreshold"
       missing     = "notBreaching"
+      email       = false
       description = "The daily Anthropic usage and cost ingest (dashboard.aws.ingest_handler, dashboard/ingest.py) raised. Logs: /aws/lambda/factory-dashboard-ingest."
     }
     "factory-dashboard-ingest-missed" = {
@@ -301,6 +329,7 @@ locals {
       threshold   = 1
       comparison  = "LessThanThreshold"
       missing     = "breaching"
+      email       = true
       description = "The daily ingest did not run in the last day; check the factory-dashboard-ingest-daily EventBridge rule and the factory-dashboard-ingest Lambda (dashboard/aws.py)."
     }
     "factory-dashboard-web-5xx" = {
@@ -310,6 +339,7 @@ locals {
       threshold   = 3
       comparison  = "GreaterThanOrEqualToThreshold"
       missing     = "notBreaching"
+      email       = false
       description = "factory.tollchat.ai returned 5xx responses (dashboard.aws.web_handler, dashboard/web.py, dashboard/report.py). A 503 means the factory_sandbox database was unreachable or unreadable as factory_sandbox_reader. Logs: /aws/lambda/factory-dashboard-web."
     }
     "factory-dashboard-web-errors" = {
@@ -319,6 +349,7 @@ locals {
       threshold   = 1
       comparison  = "GreaterThanOrEqualToThreshold"
       missing     = "notBreaching"
+      email       = false
       description = "The dashboard web Lambda raised (dashboard.aws.web_handler, dashboard/render.py, dashboard/report.py). Logs: /aws/lambda/factory-dashboard-web."
     }
   }
@@ -337,7 +368,7 @@ resource "aws_cloudwatch_metric_alarm" "factory_dashboard" {
   threshold           = each.value.threshold
   comparison_operator = each.value.comparison
   treat_missing_data  = each.value.missing
-  alarm_actions       = [aws_sns_topic.factory_dashboard_alarms[0].arn]
+  alarm_actions       = [each.value.email ? aws_sns_topic.alerts.arn : aws_sns_topic.factory_dashboard_alarms[0].arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "factory_alarm_issues_errors" {

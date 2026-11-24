@@ -57,6 +57,7 @@ variables {
   budget_notification_email = "budget@example.com"
   fetcher_package_path      = "tests/fetcher.zip"
   factory_dashboard_package_path = "tests/fetcher.zip"
+  factory_alarm_app              = { client_id = "Iv23client", slug = "tollchat-alarms" }
 }
 run "development" {
   command = plan

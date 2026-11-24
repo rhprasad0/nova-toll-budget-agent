@@ -484,16 +484,15 @@ def test_lambdas_ingest_as_the_writer_and_serve_as_the_sandbox_reader(
     from dashboard.analytics import AnalyticsError
 
     reader = "factory_sandbox_reader"
-    with psycopg.connect(dbname="postgres", autocommit=True) as admin:
-        admin.execute(
-            f"DO $$ BEGIN IF to_regrole('{reader}') IS NULL THEN "
-            f"CREATE ROLE {reader} LOGIN; END IF; END $$"
-        )
     users: list[str] = []
 
     def connect(user: str) -> psycopg.Connection:
         users.append(user)
-        return psycopg.connect(database, user=user if user == reader else None)
+        connection = psycopg.connect(database)
+        if user == reader:
+            connection.execute(f"SET ROLE {reader}")
+            connection.commit()
+        return connection
 
     keys: list[str] = []
     fake = FakeAnalytics(
@@ -512,6 +511,31 @@ def test_lambdas_ingest_as_the_writer_and_serve_as_the_sandbox_reader(
     monkeypatch.setenv("DB_READER", reader)
     monkeypatch.setenv("FACTORY_WORKSPACE_ID", WORKSPACE)
 
+    with psycopg.connect(dbname="postgres", autocommit=True) as admin:
+        admin.execute(f"DROP ROLE IF EXISTS {reader}")
+        admin.execute(f"CREATE ROLE {reader}")
+    try:
+        exercise_lambdas(fake, keys, users, reader)
+    finally:
+        with psycopg.connect(database, autocommit=True) as owner:
+            owner.execute(f"DROP OWNED BY {reader}")
+        with psycopg.connect(dbname="postgres", autocommit=True) as admin:
+            admin.execute(f"DROP ROLE {reader}")
+
+    class Broken:
+        def get(self, path: str, params: object) -> dict[str, Any]:
+            raise AnalyticsError("upstream 500")
+
+    monkeypatch.setattr(aws, "HttpAnalyticsClient", lambda key="": Broken())
+    with pytest.raises(AnalyticsError):
+        aws.ingest_handler({}, None)
+
+
+def exercise_lambdas(
+    fake: FakeAnalytics, keys: list[str], users: list[str], reader: str
+) -> None:
+    from dashboard import aws
+
     assert aws.ingest_handler({}, None) == {
         "usage_rows": len(usage_rows()),
         "cost_rows": len(cost_rows()),
@@ -522,17 +546,12 @@ def test_lambdas_ingest_as_the_writer_and_serve_as_the_sandbox_reader(
     response = aws.web_handler({"rawPath": "/", "rawQueryString": "range=all"}, None)
     assert response["statusCode"] == 200
     assert response["headers"]["content-type"] == "text/html; charset=utf-8"
+    assert response["headers"]["cache-control"] == "max-age=300"
     assert cells(response["body"])["total-cost"] == "$80.90"
-    assert aws.web_handler({"rawPath": "/nope"}, None)["statusCode"] == 404
+    missing = aws.web_handler({"rawPath": "/nope"}, None)
+    assert missing["statusCode"] == 404
+    assert missing["headers"]["cache-control"] == "no-store"
     assert users == ["factory_sandbox", reader]
-
-    class Broken:
-        def get(self, path: str, params: object) -> dict[str, Any]:
-            raise AnalyticsError("upstream 500")
-
-    monkeypatch.setattr(aws, "HttpAnalyticsClient", lambda key="": Broken())
-    with pytest.raises(AnalyticsError):
-        aws.ingest_handler({}, None)
 
 
 def alarm(state: str = "ALARM") -> dict[str, Any]:

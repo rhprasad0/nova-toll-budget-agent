@@ -83,6 +83,12 @@ def test_the_site_is_cloudfront_over_a_signed_function_url(
     assert behavior["allowed_methods"] == ["GET", "HEAD"]
     assert behavior["viewer_protocol_policy"] == "redirect-to-https"
     assert distribution["aliases"] == []
+    policy = plan["aws_cloudfront_cache_policy.factory_dashboard[0]"]
+    (key,) = policy["parameters_in_cache_key_and_forwarded_to_origin"]
+    assert key["headers_config"] == [{"header_behavior": "none", "headers": []}]
+    assert key["query_strings_config"] == [
+        {"query_string_behavior": "whitelist", "query_strings": [{"items": ["range"]}]}
+    ]
 
 
 def test_dashboard_alarms_file_issues_and_the_filer_alarms_by_email(

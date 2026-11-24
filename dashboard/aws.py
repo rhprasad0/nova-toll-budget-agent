@@ -57,7 +57,7 @@ def web_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
         "statusCode": status,
         "headers": {
             "content-type": f"{content_type}; charset=utf-8",
-            "cache-control": "max-age=300",
+            "cache-control": "max-age=300" if status == 200 else "no-store",
         },
         "body": body,
     }
