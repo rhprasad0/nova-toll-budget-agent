@@ -300,6 +300,7 @@ def start(
     github: FakeGitHub,
     client: FakeClient,
     requester: str = OWNER,
+    alarm_app: str | None = None,
 ) -> str | None:
     return dispatch.run_start(
         client=client,
@@ -311,6 +312,7 @@ def start(
         requester=requester,
         factory_login=BOT,
         budget_cents=1000,
+        alarm_app=alarm_app,
     )
 
 
@@ -365,6 +367,24 @@ def test_start_refuses_and_unlabels_without_a_session(
     assert body.startswith("The factory skipped this issue: ") and reason in body
     assert token == "ghs_app"
     assert github.unlabeled == [(799, "factory")]
+
+
+@pytest.mark.parametrize(
+    ("requester", "author", "started"),
+    [
+        ("tollchat-alarms[bot]", "app/tollchat-alarms", True),
+        (OWNER, "app/tollchat-alarms", True),
+        ("tollchat-alarms[bot]", "someone", False),
+        ("tollchat-factory[bot]", "app/tollchat-factory", False),
+    ],
+)
+def test_the_alarm_app_starts_only_issues_it_or_the_owner_wrote(
+    requester: str, author: str, started: bool
+) -> None:
+    client, github = FakeClient(), FakeGitHub(issue(author))
+    result = start(github, client, requester, alarm_app="tollchat-alarms")
+    assert (result == "sesn_1") is started
+    assert github.unlabeled == ([] if started else [(799, "factory")])
 
 
 def test_the_vault_is_refreshed_before_the_session_is_created() -> None:
