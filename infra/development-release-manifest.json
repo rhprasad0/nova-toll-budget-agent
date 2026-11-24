@@ -24,9 +24,10 @@
     "infra/data.tf": "e8e443e33a9d908f405eec54fa6bee2075fa8c228e293d734d1b0a5fc0428bc1",
     "infra/delivery_plan_validator.py": "5ca9964eb6b998ca3663b30fd2e2c82e857d13eca7b757409e37b3210e3b749a",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
+    "infra/factory-dashboard.tf": "87f8ed742a0da09d2eccc8572477ac731f699904cdd625a24df75a3181098bfc",
     "infra/factory.tf": "daa60d2d03800556cf155e0bf48a32da6069903ddedca39a048861387e77bb6e",
     "infra/iam.tf": "a409b433b53e99cabb60a82a17d809244cbfb3f960e8d0a2a7d52127f1099420",
-    "infra/kms.tf": "be9512e49926805d56b6c521793c08880929948b820f943f0a2c5a0f9e589168",
+    "infra/kms.tf": "75cc656020e2231fc88d3ccbcc4ceec135223e22d29a4f0cecfdd630984ad57a",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
     "infra/lambda.tf": "c95fafdc5f815820273eb9f314787532e8b6e5c1f601f50c2481f51b5c48ce0c",
     "infra/network.tf": "9563ed49f827cea47a2b13855a640cfcb9b9d7db2c31ca3c90010b4af516a081",
@@ -42,7 +43,7 @@
     "infra/tailscale.tf": "5eeec806383e6e7524aa839d65cc10e30ac7323971a654ca19ee0f3da9e5e287",
     "infra/telemetry.tf": "38dc4053aa4380d42dd294b2a71a99b9b90b8df67c327ab8beb008ca11305117",
     "infra/triggers.tf": "fd08ed6e5d60595fbf449da0c36f970fcfabbde65d3632f590e0ba78598cfe8e",
-    "infra/variables.tf": "6972b85878fea014e2375ba05815bd9902cc722695d50c913d639e344559c881",
+    "infra/variables.tf": "b1e8b70c1394a039831a4801cc21148cd37a94ae39e652602abf8083592690c3",
     "infra/versions.tf": "f36522386a6e5e733d6d0ed5b61cccb33ba5e08737233da00698682beae671a5",
     "v2/agent-sops/nova-toll-pricing-assistant.sop.md": "f0d0bc0cc574909dc822e8707ae4c72657ec2fbabaf18e788bc7bb0b4160e5ed",
     "v2/agent/__init__.py": "9a7c5def20c27bee02ace31193aa0ab9b8548e1502db2f894fcf67d3b86a5e88",
@@ -160,7 +161,7 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/costs.py": "61b82090f88090b0f5742dee2674c8ebc3ce2c38712f9e7dce0b8f2765783abf",
-    "v2/pyproject.toml": "b37288b18a04b000c365a12af5fdd42a0b28a92b6617f52ac40e8ee40f195634",
+    "v2/pyproject.toml": "9f03a14c7b9d038a3232c73206806174fec04f6d1fc1b94f9a88cbc91c51c23b",
     "v2/scripts/adopt_production_baseline.py": "77d574fc0bab36483224a5f8187cb80f107509e80290ab3cac9a2990f52c6737",
     "v2/scripts/blue_green.py": "99fcb31cd5af1c78c21e4aa6317a01c83f3e28caed37472312938736e61122cf",
     "v2/scripts/build_agentcore_zips.sh": "9c76ef918f4d7c21b2d7eb6f51f2db6d3103810c2c618c1b73b2ab41c77684c4",
@@ -184,7 +185,7 @@
     "v2/scripts/shared-package-compatibility.json": "3f634554f713980c37d362c1f69547fd41b431a308a2a33d7ad3a1c39f478e24",
     "v2/scripts/shared_packages.py": "16247f229569e9e89b81e1a36243e183840a38ba4207a61edf227f1222130331",
     "v2/scripts/verify_release_bundle.py": "a0ff16ce79746979c9653b8c71fac4f12f6ca9475f09ebd289b623e66b8483d1",
-    "v2/uv.lock": "3d0e8499dd9b2073c66798046337ed9493139ea98e4d2dc913c221a9dbe33df1"
+    "v2/uv.lock": "8c7d874b26dc39c2a18d5df3abc3a8e75338c0dd63455f91c7eb585f18e01839"
   },
   "packages": {
     "agentcore.zip": "9499e745c7a9f4fce86cfd37b72276763013a873c90a7ee606fa31324f675234",

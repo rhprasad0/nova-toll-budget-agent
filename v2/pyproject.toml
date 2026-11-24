@@ -11,6 +11,7 @@ dependencies = [
     "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     "strands-agents[openai]>=1.52.0",
+    "pyjwt[crypto]>=2.15.0",
 ]
 
 [dependency-groups]

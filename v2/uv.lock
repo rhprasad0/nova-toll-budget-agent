@@ -2322,6 +2322,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "strands-agents", extra = ["openai"] },
 ]
 
@@ -2344,6 +2345,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = "==1.45.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.0" },
     { name = "strands-agents", extras = ["openai"], specifier = ">=1.52.0" },
 ]
 

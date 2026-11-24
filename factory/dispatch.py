@@ -374,15 +374,18 @@ def admission_problem(
     *,
     issue: dict[str, Any],
     owner: str,
+    alarm_app: str | None,
     requester: str,
     open_pull_requests: list[str],
     branch_exists: bool,
 ) -> str | None:
-    if requester != owner:
+    requesters = {owner, f"{alarm_app}[bot]"} if alarm_app else {owner}
+    authors = {owner, f"app/{alarm_app}"} if alarm_app else {owner}
+    if requester not in requesters:
         return (
             f"only `{owner}` can start the factory, and `{requester}` added the label"
         )
-    if issue["author"]["login"] != owner:
+    if issue["author"]["login"] not in authors:
         return f"the factory takes only issues `{owner}` wrote"
     if issue["state"] != "OPEN":
         return "the issue is closed"
@@ -934,11 +937,13 @@ def run_start(
     requester: str,
     factory_login: str,
     budget_cents: int,
+    alarm_app: str | None = None,
 ) -> str | None:
     issue = github.issue(issue_number)
     problem = admission_problem(
         issue=issue,
         owner=repo.split("/")[0],
+        alarm_app=alarm_app,
         requester=requester,
         open_pull_requests=github.open_pull_requests(issue),
         branch_exists=github.branch_head(branch_for(issue_number)) is not None,
@@ -1054,6 +1059,7 @@ def main(argv: list[str] | None = None) -> None:
             requester=args.requested_by,
             factory_login=os.environ["FACTORY_GITHUB_LOGIN"],
             budget_cents=args.budget_cents,
+            alarm_app=os.environ.get("FACTORY_ALARM_APP") or None,
         )
     else:
         run_watch(

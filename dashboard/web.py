@@ -8,6 +8,33 @@ import psycopg
 
 from dashboard import render, report
 
+Response = tuple[int, str, str]
+
+
+def respond(
+    connect: Callable[[], psycopg.Connection], path: str, query: str, now: datetime
+) -> Response:
+    if path == "/healthz":
+        return 200, "ok\n", "text/plain"
+    if path != "/":
+        return 404, "not found\n", "text/plain"
+    range_key = parse_qs(query).get("range", ["30d"])[0]
+    if range_key not in report.RANGES:
+        return 400, "range must be 30d or all\n", "text/plain"
+    try:
+        with connect() as connection:
+            connection.read_only = True
+            data = report.build(connection, range_key, now)
+    except psycopg.Error as error:
+        print(f"database error: {error}", file=sys.stderr)
+        return (
+            503,
+            "The dashboard database is unavailable or not set up; "
+            "run python -m dashboard.migrate.\n",
+            "text/plain",
+        )
+    return 200, render.render(data), "text/html"
+
 
 def make_server(
     database_url: str,
@@ -19,33 +46,12 @@ def make_server(
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parts = urlsplit(self.path)
-            if parts.path == "/healthz":
-                self._send(200, "ok\n", "text/plain")
-            elif parts.path == "/":
-                self._page(parse_qs(parts.query).get("range", ["30d"])[0])
-            else:
-                self._send(404, "not found\n", "text/plain")
-
-        def _page(self, range_key: str) -> None:
-            if range_key not in report.RANGES:
-                self._send(400, "range must be 30d or all\n", "text/plain")
-                return
-            try:
-                with psycopg.connect(database_url, connect_timeout=5) as connection:
-                    connection.read_only = True
-                    data = report.build(connection, range_key, now())
-            except psycopg.Error as error:
-                print(f"database error: {error}", file=sys.stderr)
-                self._send(
-                    503,
-                    "The dashboard database is unavailable or not set up; "
-                    "run python -m dashboard.migrate.\n",
-                    "text/plain",
-                )
-                return
-            self._send(200, render.render(data), "text/html")
-
-        def _send(self, status: int, body: str, content_type: str) -> None:
+            status, body, content_type = respond(
+                lambda: psycopg.connect(database_url, connect_timeout=5),
+                parts.path,
+                parts.query,
+                now(),
+            )
             payload = body.encode()
             self.send_response(status)
             self.send_header("Content-Type", f"{content_type}; charset=utf-8")

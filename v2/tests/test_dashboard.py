@@ -459,3 +459,204 @@ def test_every_command_documents_itself(command: str) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout
+
+
+class FakeSsm:
+    def __init__(self, values: dict[str, str]) -> None:
+        self.values = values
+
+    def get_parameter(self, Name: str, WithDecryption: bool) -> dict[str, Any]:
+        assert WithDecryption
+        return {"Parameter": {"Value": self.values[Name]}}
+
+
+def ssm(values: dict[str, str]) -> Callable[[str], FakeSsm]:
+    return lambda name="": FakeSsm(values)
+
+
+@pytest.mark.live
+def test_lambdas_ingest_as_the_writer_and_serve_as_the_sandbox_reader(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import psycopg
+
+    from dashboard import aws
+    from dashboard.analytics import AnalyticsError
+
+    reader = "factory_sandbox_reader"
+    with psycopg.connect(dbname="postgres", autocommit=True) as admin:
+        admin.execute(
+            f"DO $$ BEGIN IF to_regrole('{reader}') IS NULL THEN "
+            f"CREATE ROLE {reader} LOGIN; END IF; END $$"
+        )
+    users: list[str] = []
+
+    def connect(user: str) -> psycopg.Connection:
+        users.append(user)
+        return psycopg.connect(database, user=user if user == reader else None)
+
+    keys: list[str] = []
+    fake = FakeAnalytics(
+        usage_rows(), cost_rows(), shift_days=(datetime.now(UTC) - NOW).days
+    )
+    monkeypatch.setattr(aws, "connect", connect)
+
+    def client(key: str) -> FakeAnalytics:
+        keys.append(key)
+        return fake
+
+    monkeypatch.setattr(aws.boto3, "client", ssm({"/admin-key": "sk-ant-admin-x"}))
+    monkeypatch.setattr(aws, "HttpAnalyticsClient", client)
+    monkeypatch.setenv("ADMIN_KEY_PARAMETER", "/admin-key")
+    monkeypatch.setenv("DB_WRITER", "factory_sandbox")
+    monkeypatch.setenv("DB_READER", reader)
+    monkeypatch.setenv("FACTORY_WORKSPACE_ID", WORKSPACE)
+
+    assert aws.ingest_handler({}, None) == {
+        "usage_rows": len(usage_rows()),
+        "cost_rows": len(cost_rows()),
+    }
+    assert keys == ["sk-ant-admin-x"]
+    assert all(params["workspace_ids[]"] == [WORKSPACE] for _, params in fake.requests)
+
+    response = aws.web_handler({"rawPath": "/", "rawQueryString": "range=all"}, None)
+    assert response["statusCode"] == 200
+    assert response["headers"]["content-type"] == "text/html; charset=utf-8"
+    assert cells(response["body"])["total-cost"] == "$80.90"
+    assert aws.web_handler({"rawPath": "/nope"}, None)["statusCode"] == 404
+    assert users == ["factory_sandbox", reader]
+
+    class Broken:
+        def get(self, path: str, params: object) -> dict[str, Any]:
+            raise AnalyticsError("upstream 500")
+
+    monkeypatch.setattr(aws, "HttpAnalyticsClient", lambda key="": Broken())
+    with pytest.raises(AnalyticsError):
+        aws.ingest_handler({}, None)
+
+
+def alarm(state: str = "ALARM") -> dict[str, Any]:
+    return {
+        "AlarmName": "factory-dashboard-ingest-errors",
+        "AlarmDescription": "The daily ingest raised; logs are in /aws/lambda/factory-dashboard-ingest.",
+        "NewStateValue": state,
+        "NewStateReason": "Threshold Crossed: 1 datapoint [1.0] >= 1.0",
+        "StateChangeTime": "2026-11-24T06:10:00.000+0000",
+    }
+
+
+@pytest.fixture
+def github(monkeypatch: pytest.MonkeyPatch) -> Generator[dict[str, Any]]:
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from dashboard import alarm_issues
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    state: dict[str, Any] = {
+        "private_key": key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode(),
+        "issues": [],
+        "labels": [],
+        "auth": [],
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def _reply(self, body: object) -> None:
+            payload = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def _authorize(self) -> None:
+            scheme, token = self.headers["Authorization"].split(" ", 1)
+            if scheme == "Bearer":
+                claims = jwt.decode(token, key.public_key(), algorithms=["RS256"])
+                assert claims["iss"] == "Iv23client"
+            else:
+                assert (scheme, token) == ("token", "ghs_installation")
+            state["auth"].append(scheme)
+
+        def do_GET(self) -> None:
+            self._authorize()
+            parts = urlsplit(self.path)
+            if parts.path == "/repos/o/r/installation":
+                self._reply({"id": 42})
+            else:
+                assert parts.path == "/repos/o/r/issues"
+                query = parse_qs(parts.query)
+                assert query["state"] == ["open"]
+                assert query["creator"] == ["tollchat-alarms[bot]"]
+                self._reply(state["issues"])
+
+        def do_POST(self) -> None:
+            self._authorize()
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"null")
+            if self.path == "/app/installations/42/access_tokens":
+                self._reply({"token": "ghs_installation"})
+            elif self.path == "/repos/o/r/issues":
+                state["issues"].append({**body, "number": 900 + len(state["issues"])})
+                self._reply(state["issues"][-1])
+            else:
+                state["labels"].append((self.path, body))
+                self._reply([])
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(
+        alarm_issues, "GITHUB", f"http://127.0.0.1:{server.server_address[1]}"
+    )
+    try:
+        yield state
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_an_alarm_files_one_labeled_issue_as_the_alarm_app(
+    github: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dashboard import alarm_issues
+
+    monkeypatch.setattr(
+        alarm_issues.boto3,
+        "client",
+        ssm({"/app-key": github["private_key"]}),
+    )
+    monkeypatch.setenv("APP_PRIVATE_KEY_PARAMETER", "/app-key")
+    monkeypatch.setenv("APP_CLIENT_ID", "Iv23client")
+    monkeypatch.setenv("APP_SLUG", "tollchat-alarms")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+
+    def event(*alarms: dict[str, Any]) -> dict[str, Any]:
+        return {"Records": [{"Sns": {"Message": json.dumps(a)}} for a in alarms]}
+
+    assert alarm_issues.handler(event(alarm(), alarm("OK")), None) == [900]
+    (issue,) = github["issues"]
+    assert issue["title"] == "Alarm: factory-dashboard-ingest-errors"
+    body = issue["body"]
+    assert (
+        body.index("## Change")
+        < body.index("## Done when")
+        < body.index("## Needs a human")
+    )
+    assert (
+        "Threshold Crossed" in body and "/aws/lambda/factory-dashboard-ingest" in body
+    )
+    assert github["labels"] == [
+        ("/repos/o/r/issues/900/labels", {"labels": ["factory"]})
+    ]
+    assert github["auth"][:2] == ["Bearer", "Bearer"]
+
+    assert alarm_issues.handler(event(alarm()), None) == []
+    assert len(github["issues"]) == 1

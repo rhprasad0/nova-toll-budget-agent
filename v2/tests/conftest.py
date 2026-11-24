@@ -56,6 +56,7 @@ variables {
   environment               = "development"
   budget_notification_email = "budget@example.com"
   fetcher_package_path      = "tests/fetcher.zip"
+  factory_dashboard_package_path = "tests/fetcher.zip"
 }
 run "development" {
   command = plan

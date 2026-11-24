@@ -60,3 +60,21 @@ variable "budget_notification_email" {
   type        = string
   sensitive   = true
 }
+
+variable "factory_dashboard_package_path" {
+  description = "Path to the factory dashboard Lambda zip that dashboard/build_lambda_zip.sh writes. Development only."
+  type        = string
+  default     = ""
+}
+
+variable "factory_dashboard_domain_ready" {
+  description = "Serve factory.tollchat.ai once its ACM certificate is issued."
+  type        = bool
+  default     = false
+}
+
+variable "factory_alarm_app" {
+  description = "The GitHub App that files factory issues for dashboard alarms. Its private key lives in SSM, not here."
+  type        = object({ client_id = string, slug = string })
+  default     = { client_id = "", slug = "tollchat-alarms" }
+}
