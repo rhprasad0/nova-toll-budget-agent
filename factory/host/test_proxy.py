@@ -155,6 +155,9 @@ CASES: dict[str, list[Any]] = {
     "cloudflare_release": ["https", "github.com", CLOUDFLARE + "v5/sums"],
     "rds_bundle": ["https", "truststore.pki.rds.amazonaws.com", RDS],
     "unlisted_host": ["connect", "evil", 443],
+    "unlisted_https": ["https", "evil", "/search?q=x"],
+    "anthropic_upper": ["https", "API.ANTHROPIC.COM", "/v1/messages"],
+    "anthropic_trailing_dot": ["https", "api.anthropic.com.", "/v1/messages"],
     "other_port": ["connect", "api.anthropic.com", 2222],
     "listed_host_other_port": ["connect", "github.com", 22],
     "host_header_mismatch": ["https", "pypi.org", "/", "api.anthropic.com"],
@@ -183,6 +186,7 @@ CASES: dict[str, list[Any]] = {
 SANDBOX = {
     "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_page",
     "repository_api", "repository_push", "worker_poll", "registry_pull",
+    "unlisted_host", "unlisted_https", "pypi_upload", "registry_push", "rds_suffix",
 }  # fmt: skip
 ALLOWED = {
     "subscription": {"anthropic", "pypi", "cloudflare_release", "rds_bundle", "worker_poll",

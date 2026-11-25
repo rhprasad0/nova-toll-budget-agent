@@ -8,8 +8,8 @@ tools:
   - type: agent_toolset_20260401
     default_config: {permission_policy: {type: always_allow}}
     configs:
-      - {name: web_fetch, enabled: true, allowed_domains: &web [github.com, docs.github.com, developer.hashicorp.com, registry.terraform.io, docs.astral.sh, nodejs.org, docs.python.org, playwright.dev, postgis.net, www.postgresql.org]}
-      - {name: web_search, enabled: true, allowed_domains: *web}
+      - {name: web_fetch, enabled: true}
+      - {name: web_search, enabled: true}
   - type: mcp_toolset
     mcp_server_name: github
     default_config: {enabled: false}
