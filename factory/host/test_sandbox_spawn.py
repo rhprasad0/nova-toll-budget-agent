@@ -80,7 +80,7 @@ def test_spawn_gives_a_lab_repository_a_fresh_lab_and_tears_it_down(
     fake.mkdir()
     calls = tmp_path / "calls"
     (fake / "docker").write_text(
-        f'#!/usr/bin/env bash\nprintf "%s\\0" "$@" >> {calls}\nprintf "\\n" >> {calls}\n'
+        f'#!/usr/bin/env bash\nprintf "%s\\0" "$@" "LAB_CODE=${{LAB_CODE:-}}" >> {calls}\nprintf "\\n" >> {calls}\n'
     )
     (fake / "docker").chmod(0o755)
     env = {
@@ -98,20 +98,25 @@ def test_spawn_gives_a_lab_repository_a_fresh_lab_and_tears_it_down(
     )
     lines = [line.split("\0")[:-1] for line in calls.read_text().split("\n") if line]
     clone = next(line for line in lines if line[0] == "run" and "clone" in line)
-    assert clone[-2:] == [
+    assert clone[-3:-1] == [
         "https://github.com/rhprasad0/chaos-lab",
         "/workspace/chaos-lab",
     ]
+    snapshot = next(
+        line
+        for line in lines
+        if "/lab" in " ".join(line) and "archive" in " ".join(line)
+    )
+    assert f"{tmp_path}/sessions/sesn_1.lab:/lab" in snapshot
+    assert lines.index(clone) < lines.index(snapshot)
     compose = [line for line in lines if line[0] == "compose"]
     up = next(line for line in compose if "up" in line)
-    assert (
-        up[up.index("-f") + 1]
-        == f"{tmp_path}/sessions/sesn_1/chaos-lab/lab/compose.yaml"
-    )
+    assert up[up.index("-f") + 1] == f"{tmp_path}/sessions/sesn_1.lab/lab/compose.yaml"
+    assert up[-1] == f"LAB_CODE={tmp_path}/sessions/sesn_1/chaos-lab"
     assert up[up.index("-p") + 1] == "work-work_ab1"
     assert "--wait" in up
-    sandbox = next(line for line in lines if line[-1] == "factory-sandbox:latest")
-    assert lines.index(up) < lines.index(sandbox)
+    sandbox = next(line for line in lines if line[-2:-1] == ["factory-sandbox:latest"])
+    assert lines.index(snapshot) < lines.index(up) < lines.index(sandbox)
     assert "LAB_PROJECT=work-work_ab1" in sandbox
     downs = [line for line in compose if "down" in line]
     assert len(downs) == 2

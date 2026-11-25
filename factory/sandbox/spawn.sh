@@ -9,6 +9,7 @@ socket="${DOCKER_HOST#unix://}"
 image=factory-sandbox:latest
 repo="${FACTORY_REPO:-rhprasad0/nova-toll-budget-agent}"
 clone="$workdir/${repo#*/}"
+labdir="$workdir.lab"
 lab="${name,,}"
 proxy=(--env "HTTPS_PROXY=$FACTORY_PROXY" --env "HTTP_PROXY=$FACTORY_PROXY"
   --env "https_proxy=$FACTORY_PROXY" --env "http_proxy=$FACTORY_PROXY")
@@ -32,10 +33,17 @@ trap cleanup EXIT
 if [[ ! -d "$clone/.git" ]]; then
   docker run --rm "${proxy[@]}" --volume "$workdir:/workspace" --entrypoint git "$image" \
     clone --quiet "https://github.com/$repo" "/workspace/${repo#*/}"
+  if [[ -n "${FACTORY_LAB:-}" ]]; then
+    rm -rf "$labdir"
+    mkdir -p "$labdir"
+    docker run --rm --volume "$clone:/clone:ro" --volume "$labdir:/lab" --entrypoint sh "$image" \
+      -c 'git -C /clone archive HEAD | tar -x -C /lab'
+  fi
 fi
 lab_env=()
 if [[ -n "${FACTORY_LAB:-}" ]]; then
-  docker compose -f "$clone/$FACTORY_LAB" -p "$lab" up --detach --wait --quiet-pull >/dev/null
+  LAB_CODE="$clone" docker compose -f "$labdir/$FACTORY_LAB" -p "$lab" up --detach --wait --quiet-pull \
+    >/dev/null
   lab_env=(--env "LAB_PROJECT=$lab")
 fi
 
