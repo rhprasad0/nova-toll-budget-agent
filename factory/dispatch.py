@@ -159,8 +159,14 @@ AGENT_KEY = "./agents/worker.md"
 REVIEWER_KEY = "./agents/reviewer.md"
 RUBRIC = FACTORY / "rubrics" / "worker.md"
 ENVIRONMENTS = {
-    "read": "./environments/tollchat-box-read.yaml",
-    "write": "./environments/tollchat-box-write.yaml",
+    "rhprasad0/nova-toll-budget-agent": {
+        "read": "./environments/tollchat-box-read.yaml",
+        "write": "./environments/tollchat-box-write.yaml",
+    },
+    "rhprasad0/chaos-lab": {
+        "read": "./environments/chaos-lab-box-read.yaml",
+        "write": "./environments/chaos-lab-box-write.yaml",
+    },
 }
 VAULT_KEY = "./vaults/github.yaml"
 LABEL = "factory"
@@ -451,7 +457,7 @@ def create_session(
 ) -> str:
     session = client.beta.sessions.create(
         agent=lock_id(lock, agent_key),
-        environment_id=lock_id(lock, ENVIRONMENTS[environment]),
+        environment_id=lock_id(lock, ENVIRONMENTS[repo][environment]),
         vault_ids=[lock_id(lock, VAULT_KEY)],
         title=f"{repo}#{issue}",
         metadata={"repo": repo, "issue": str(issue)},

@@ -19,8 +19,8 @@ LOCK = {
     "resources": {
         dispatch.AGENT_KEY: {"id": "agent_1"},
         dispatch.REVIEWER_KEY: {"id": "agent_review"},
-        dispatch.ENVIRONMENTS["read"]: {"id": "env_read"},
-        dispatch.ENVIRONMENTS["write"]: {"id": "env_write"},
+        dispatch.ENVIRONMENTS[REPO]["read"]: {"id": "env_read"},
+        dispatch.ENVIRONMENTS[REPO]["write"]: {"id": "env_write"},
         dispatch.VAULT_KEY: {"id": "vlt_1"},
     },
 }
@@ -742,7 +742,7 @@ def test_lock_keys_name_the_factory_files() -> None:
     keys = (
         dispatch.AGENT_KEY,
         dispatch.REVIEWER_KEY,
-        *dispatch.ENVIRONMENTS.values(),
+        *(key for pair in dispatch.ENVIRONMENTS.values() for key in pair.values()),
         dispatch.VAULT_KEY,
     )
     for key in keys:

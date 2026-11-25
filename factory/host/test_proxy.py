@@ -23,6 +23,8 @@ TOKEN = "test-token-not-a-credential"
 CLOUDFLARE = "/cloudflare/terraform-provider-cloudflare/releases/download/"
 RDS = "/global/global-bundle.pem"
 REPOSITORY = "/rhprasad0/nova-toll-budget-agent"
+LAB = "/rhprasad0/chaos-lab"
+GRADER = "/rhprasad0/chaos-lab-grader"
 GITHUB_TOKEN = "github-test-token-not-a-credential"
 API_TOKEN = "github-read-token-not-a-credential"
 
@@ -174,6 +176,21 @@ CASES: dict[str, list[Any]] = {
     "other_repository_api": ["https", "api.github.com", "/repos/someone/repo"],
     "repository_push": ["post", "github.com", REPOSITORY + "/git-receive-pack"],
     "other_repository_push": ["post", "github.com", "/someone/repo/git-receive-pack"],
+    "lab_clone": ["https", "github.com", LAB + ".git/info/refs"],
+    "lab_push": ["post", "github.com", LAB + "/git-receive-pack"],
+    "lab_api": ["https", "api.github.com", "/repos" + LAB + "/pulls"],
+    "grader_clone": ["https", "github.com", GRADER + ".git/info/refs"],
+    "grader_unsuffixed_clone": ["https", "github.com", GRADER + "/info/refs"],
+    "grader_api": [
+        "https",
+        "api.github.com",
+        "/repos" + GRADER + "/contents/README.md",
+    ],
+    "grader_encoded": [
+        "https",
+        "github.com",
+        LAB + "%2f..%2fchaos-lab-grader/info/refs",
+    ],
     "worker_poll": ["https", "api.anthropic.com", "/v1/environments/env_1/work/poll"],
     "pypi_upload": ["post", "pypi.org", "/legacy/"],
     "registry_pull": [
@@ -187,6 +204,7 @@ SANDBOX = {
     "pypi", "cloudflare_release", "rds_bundle", "repository", "repository_page",
     "repository_api", "repository_push", "worker_poll", "registry_pull",
     "unlisted_host", "unlisted_https", "pypi_upload", "registry_push", "rds_suffix",
+    "lab_clone", "lab_push", "lab_api",
 }  # fmt: skip
 ALLOWED = {
     "subscription": {"anthropic", "pypi", "cloudflare_release", "rds_bundle", "worker_poll",

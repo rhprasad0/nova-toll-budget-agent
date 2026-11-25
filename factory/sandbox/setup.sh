@@ -139,6 +139,19 @@ for user in "${!ports[@]}"; do
   sed -e "s/@USER@/$user/g" -e "s/@UID@/$uid/g" "$here/systemd/factory-worker.service.in" \
     >"/etc/systemd/system/factory-worker-${user#factory-}@.service"
 
+  lab_environment="/etc/factory-sandbox/chaos-lab-${user#factory-}.env"
+  key="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_KEY=//p' "$lab_environment" 2>/dev/null || true)"
+  id="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_ID=//p' "$lab_environment" 2>/dev/null || true)"
+  umask 077
+  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\nFACTORY_LAB=lab/compose.yaml\n' \
+    "$id" "$key" >"$lab_environment"
+  umask 022
+  chmod 600 "$lab_environment"
+  sed -e "s/@USER@/$user/g" -e "s/@UID@/$uid/g" -e "s/TollChat factory/chaos-lab factory/" \
+    -e "\|^EnvironmentFile=|a EnvironmentFile=$lab_environment" \
+    "$here/systemd/factory-worker.service.in" \
+    >"/etc/systemd/system/factory-worker-chaos-lab-${user#factory-}@.service"
+
   if ! as_user "$user" docker info >/dev/null 2>&1; then
     as_user "$user" systemctl --user reset-failed docker.service 2>/dev/null || true
     as_user "$user" dockerd-rootless-setuptool.sh install --force >/dev/null
@@ -159,5 +172,8 @@ for user in "${!ports[@]}"; do
 done
 
 echo "ok: proxies on 10.249.0.1:18080 (read) and :18081 (write)"
-echo "next: set ANTHROPIC_ENVIRONMENT_ID and ANTHROPIC_ENVIRONMENT_KEY in /etc/factory-sandbox/factory-{read,write}.env,"
+echo "next: set ANTHROPIC_ENVIRONMENT_ID and ANTHROPIC_ENVIRONMENT_KEY in /etc/factory-sandbox/factory-{read,write}.env"
+echo "and /etc/factory-sandbox/chaos-lab-{read,write}.env,"
 echo "then: sudo systemctl enable --now factory-worker-read@{1,2} factory-worker-write@{1,2}"
+echo "and, one slot each because the lab is memory-hungry:"
+echo "sudo systemctl enable --now factory-worker-chaos-lab-read@1 factory-worker-chaos-lab-write@1"
