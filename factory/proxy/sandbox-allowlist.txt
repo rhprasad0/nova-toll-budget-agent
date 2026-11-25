@@ -12,8 +12,12 @@ github.com/cloudflare/terraform-provider-cloudflare/releases/download/ GET
 github.com/astral-sh/python-build-standalone/releases/download/ GET
 github.com/anthropics/anthropic-cli/releases/download/ GET
 github.com/cli/cli/releases/download/ GET
-# This repository over git smart HTTP, and the GitHub API for it and gh's GraphQL.
+# This repository and chaos-lab over git smart HTTP, and the GitHub API for them and gh's GraphQL.
+# Never chaos-lab-grader: it holds the hidden answers, and test_proxy.py checks it is denied.
 github.com/rhprasad0/nova-toll-budget-agent/
 github.com/rhprasad0/nova-toll-budget-agent.git/
 api.github.com/repos/rhprasad0/nova-toll-budget-agent/
+github.com/rhprasad0/chaos-lab/
+github.com/rhprasad0/chaos-lab.git/
+api.github.com/repos/rhprasad0/chaos-lab/
 api.github.com/graphql

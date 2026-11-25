@@ -1,0 +1,4 @@
+name: chaos-lab-box-write
+description: Self-hosted write sandbox on the factory box for chaos-lab builds; spawn.sh gives each session a fresh Spark and retail Postgres lab.
+config:
+  type: self_hosted
