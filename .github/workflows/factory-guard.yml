@@ -39,4 +39,6 @@ jobs:
           git -C candidate fetch --quiet "https://github.com/$REPOSITORY.git" \
             "$BASE_SHA:refs/heads/main" "refs/pull/$PR_NUMBER/head:refs/heads/candidate"
       - name: Guard the pull request with main's rules
-        run: python3 trusted/factory/host/guard.py candidate refs/heads/candidate trusted/.gitleaks.toml main
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: python3 trusted/factory/host/guard.py candidate refs/heads/candidate trusted/.gitleaks.toml main "$REPOSITORY"

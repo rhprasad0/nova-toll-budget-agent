@@ -6,14 +6,25 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-PROTECTED_PREFIXES = (
-    "infra/",
-    "v2/infra/",
-    "org-circuit-breaker/",
-    ".github/",
-    ".githooks/",
-    "factory/",
-)
+TOLLCHAT = "rhprasad0/nova-toll-budget-agent"
+PROTECTED_PREFIXES = {
+    TOLLCHAT: (
+        "infra/",
+        "v2/infra/",
+        "org-circuit-breaker/",
+        ".github/",
+        ".githooks/",
+        "factory/",
+    ),
+    "rhprasad0/chaos-lab": (
+        ".github/",
+        "verify.sh",
+        "tests/",
+        "generator/",
+        "bin/",
+        "lab/",
+    ),
+}
 PROTECTED_FILES = {"security.md", "docs/security.md", ".mcp.json"}
 PROTECTED_NAMES = {"agents.md", "claude.md", "claude.local.md"}
 PROTECTED_DIRS = {".claude"}
@@ -39,13 +50,13 @@ def changed_paths(repo: Path, base: str, head: str) -> list[str]:
     return [path for path in out.split("\0") if path]
 
 
-def protected(path: str) -> bool:
+def protected(path: str, repo: str = TOLLCHAT) -> bool:
     if path == MANIFEST:
         return False
     folded = path.casefold()
     parts = folded.split("/")
     return (
-        folded.startswith(PROTECTED_PREFIXES)
+        folded.startswith(PROTECTED_PREFIXES[repo])
         or folded in PROTECTED_FILES
         or parts[-1] in PROTECTED_NAMES
         or any(part in PROTECTED_DIRS for part in parts[:-1])
@@ -149,7 +160,9 @@ def leak_scan(
     return [f"possible secret ({rule}) in the branch" for rule in rules]
 
 
-def check(repo: Path, head: str, config: Path, base: str = "main") -> list[str]:
+def check(
+    repo: Path, head: str, config: Path, base: str = "main", name: str = TOLLCHAT
+) -> list[str]:
     """Why HEAD may not be pushed, as reasons safe to post; empty when it may."""
     if any(child.name != ".git" for child in repo.iterdir()):
         raise ValueError(f"{repo} must be a clone without a checkout")
@@ -158,7 +171,9 @@ def check(repo: Path, head: str, config: Path, base: str = "main") -> list[str]:
         merges = int(git(repo, "rev-list", "--count", "--merges", f"{base}..{head}"))
     except subprocess.CalledProcessError:
         return ["the branch does not share history with main"]
-    problems = [f"changes protected path {path}" for path in paths if protected(path)]
+    problems = [
+        f"changes protected path {path}" for path in paths if protected(path, name)
+    ]
     if merges:
         problems.append("contains merge commits")
     if CLOSING.search(git(repo, "log", "--format=%B", f"{base}..{head}")):
@@ -175,8 +190,8 @@ def check(repo: Path, head: str, config: Path, base: str = "main") -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    repo, head, config, base = argv
-    problems = check(Path(repo), head, Path(config), base=base)
+    repo, head, config, base, name = argv
+    problems = check(Path(repo), head, Path(config), base=base, name=name)
     for problem in problems:
         print(f"::error::Factory PRs may not do this: {problem}")
     return 1 if problems else 0
