@@ -23,10 +23,10 @@
     "./agents/worker.md": {
       "kind": "agent",
       "id": "agent_01Y8aT4NryjgTqtipBqBssyY",
-      "version": "10",
-      "hash": "cc6ec85022667d4bb5d79645e8fd975c",
-      "remote_hash": "c2741da1f879517dfd1aabc58fd5084f",
-      "stamp": "10"
+      "version": "11",
+      "hash": "454abbbd6b69385ac34e3cee9dcd9c8c",
+      "remote_hash": "fd328c6f9c2b9ba7dd6a3b35186807d5",
+      "stamp": "11"
     },
     "./deployments/docs.yaml": {
       "kind": "deployment",
