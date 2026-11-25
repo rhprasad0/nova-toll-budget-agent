@@ -21,7 +21,7 @@ LOCK = {
         dispatch.REVIEWER_KEY: {"id": "agent_review"},
         dispatch.ENVIRONMENTS[REPO]["read"]: {"id": "env_read"},
         dispatch.ENVIRONMENTS[REPO]["write"]: {"id": "env_write"},
-        dispatch.VAULT_KEY: {"id": "vlt_1"},
+        dispatch.VAULTS[REPO]: {"id": "vlt_1"},
     },
 }
 HEAD = "a" * 40
@@ -743,7 +743,7 @@ def test_lock_keys_name_the_factory_files() -> None:
         dispatch.AGENT_KEY,
         dispatch.REVIEWER_KEY,
         *(key for pair in dispatch.ENVIRONMENTS.values() for key in pair.values()),
-        dispatch.VAULT_KEY,
+        *dispatch.VAULTS.values(),
     )
     for key in keys:
         assert (dispatch.FACTORY / key).is_file(), key
@@ -790,6 +790,26 @@ def test_start_records_the_session_before_commenting(
     with pytest.raises(RuntimeError):
         start(Failing(), FakeClient())
     assert outputs.read_text() == "started=true\nsession_id=sesn_1\n"
+
+
+def test_each_repo_gets_its_own_environment_and_vault() -> None:
+    lab = "rhprasad0/chaos-lab"
+    lock = {"resources": {
+        dispatch.AGENT_KEY: {"id": "agent_1"},
+        **{key: {"id": f"id_{n}"} for n, key in enumerate(
+            [*dispatch.ENVIRONMENTS[REPO].values(), dispatch.VAULTS[REPO],
+             *dispatch.ENVIRONMENTS[lab].values(), dispatch.VAULTS[lab]])},
+    }}  # fmt: skip
+    client = FakeClient()
+    for repo in (REPO, lab):
+        dispatch.create_session(
+            client=client, lock=lock, agent_key=dispatch.AGENT_KEY, environment="write",
+            repo=repo, issue=1, budget_cents=1, initial_events=[],
+        )  # fmt: skip
+    assert [(c["environment_id"], c["vault_ids"]) for c in client.created] == [
+        ("id_1", ["id_2"]),
+        ("id_4", ["id_5"]),
+    ]
 
 
 @pytest.mark.parametrize("bad", ["../agents", "agent_1\nstarted=true", 7])

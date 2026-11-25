@@ -87,9 +87,13 @@ the proxy and the credential helper still run there; Stage 4 stops them.
   deploy from, so their tokens' subject is
   `repo:rhprasad0@91573985/nova-toll-budget-agent@1306930324:environment:factory`:
   GitHub puts the owner's and repository's numeric IDs in it. One federation
-  rule admits only that subject with `ref` `refs/heads/main`, bound to a service
-  account in the factory's workspace, so a pull request's run can never reach the
-  vault. Phoenix uses a stored key; this is stricter.
+  rule per repository admits only that repository's subject with `ref`
+  `refs/heads/main`, bound to a service account in the factory's workspace, so a
+  pull request's run can never reach the vault. chaos-lab's dispatch runs in its
+  own `factory` environment under its own rule, subject
+  `repo:rhprasad0@91573985/chaos-lab@1471952256:environment:factory`, and each
+  repository has its own vault, so concurrent runs never overwrite each other's
+  GitHub token. Phoenix uses a stored key; this is stricter.
 - The factory's code is written for this repository, following Phoenix's design.
   Nothing is copied: Phoenix is under the Elastic License 2.0 and this
   repository is Apache-2.0 (Ryan, 2026-11-16).

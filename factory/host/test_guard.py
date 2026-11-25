@@ -206,6 +206,21 @@ def test_the_manifest_may_change_only_digests_and_packages(repo: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("path", "blocked"),
+    [("tests/test_gold.py", True), ("verify.sh", True), ("generator/retail.py", True),
+     ("lab/compose.yaml", True), ("bin/lab", True), (".github/workflows/verify.yml", True),
+     ("CLAUDE.md", True), ("pipelines/gold.py", False), ("factory/notes.py", False)],
+)  # fmt: skip
+def test_chaos_lab_protects_its_own_paths(path: str, blocked: bool) -> None:
+    assert guard.protected(path, "rhprasad0/chaos-lab") is blocked
+
+
+def test_an_unknown_repository_is_refused() -> None:
+    with pytest.raises(KeyError):
+        guard.protected("README.md", "rhprasad0/elsewhere")
+
+
 def test_an_ordinary_change_passes(repo: Path) -> None:
     assert commit(repo, lambda r: write(r, "v2/app.py", "print('hello')\n")) == []
 
@@ -221,7 +236,7 @@ def run_cli(repo: Path) -> subprocess.CompletedProcess[str]:
                    check=True)  # fmt: skip
     return subprocess.run(
         ["python3", str(Path(guard.__file__)), clean.name, "refs/heads/candidate",
-         "trusted/.gitleaks.toml", "main"],
+         "trusted/.gitleaks.toml", "main", guard.TOLLCHAT],
         capture_output=True, text=True, check=False, cwd=repo.parent,
     )  # fmt: skip
 

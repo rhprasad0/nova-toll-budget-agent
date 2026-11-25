@@ -168,7 +168,10 @@ ENVIRONMENTS = {
         "write": "./environments/chaos-lab-box-write.yaml",
     },
 }
-VAULT_KEY = "./vaults/github.yaml"
+VAULTS = {
+    "rhprasad0/nova-toll-budget-agent": "./vaults/github.yaml",
+    "rhprasad0/chaos-lab": "./vaults/chaos-lab-github.yaml",
+}
 LABEL = "factory"
 CLOSING = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]+[\w.-]*/?[\w.-]*#\d+",
@@ -458,7 +461,7 @@ def create_session(
     session = client.beta.sessions.create(
         agent=lock_id(lock, agent_key),
         environment_id=lock_id(lock, ENVIRONMENTS[repo][environment]),
-        vault_ids=[lock_id(lock, VAULT_KEY)],
+        vault_ids=[lock_id(lock, VAULTS[repo])],
         title=f"{repo}#{issue}",
         metadata={"repo": repo, "issue": str(issue)},
         budget={
@@ -919,7 +922,7 @@ def installation_tokens(
     return InstallationTokens(
         client=client,
         repo=repo,
-        vault_id=lock_id(lock, VAULT_KEY),
+        vault_id=lock_id(lock, VAULTS[repo]),
         app_client_id=os.environ["FACTORY_APP_CLIENT_ID"],
         private_key=os.environ["FACTORY_APP_PRIVATE_KEY"],
         api_errors=(anthropic.APIError,),
