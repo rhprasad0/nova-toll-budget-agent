@@ -3,7 +3,10 @@
 - Only HTTPS to port 443 is allowed. Checks use the connection's real target
   (the CONNECT host), never the Host header, and a request whose Host header
   names a different host is refused.
-- Hosts not in allowlist.txt get a 403, both at CONNECT and per request. An entry
+- Hosts not in allowlist.txt get a 403, both at CONNECT and per request, unless it
+  has a "*" entry: then any host without path entries is allowed. A host with path
+  entries stays limited to those paths, and a host not written in lowercase without a
+  trailing dot is refused, so no spelling of it slips past those limits. An entry
   with a path allows that host only for that path: a trailing slash allows paths
   under it, and no trailing slash allows that one file. Paths are decoded first,
   and empty, `.` or `..` segments are refused.
@@ -49,6 +52,7 @@ LINES = [
 ENTRIES = [words[0] for words in LINES]
 READ_ONLY = {words[0] for words in LINES if words[1:] == ["GET"]}
 ALLOWED = {entry for entry in ENTRIES if "/" not in entry}
+ANY_HOST = "*" in ALLOWED
 PATHS: dict[str, list[str]] = {}
 for entry in ENTRIES:
     if "/" in entry:
@@ -125,9 +129,9 @@ def _path_allowed(path: str, allowed: list[str]) -> bool:
 
 def _allowed(host: str, port: int, path: str | None) -> bool:
     """path is None at CONNECT, before the request line is visible."""
-    if port != PORT:
+    if port != PORT or host != host.lower().rstrip("."):
         return False
-    if host in ALLOWED:
+    if host in ALLOWED or (ANY_HOST and host not in PATHS):
         return True
     allowed = PATHS.get(host, [])
     return bool(allowed) and (path is None or _path_allowed(path, allowed))

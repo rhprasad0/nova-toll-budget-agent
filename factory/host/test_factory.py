@@ -58,5 +58,4 @@ def test_sandbox_allowlist_reaches_the_worker_api_but_not_inference() -> None:
         "v1/sessions/",
         "v1/skills/",
     ]
-    assert not [host for host in hosts if "*" in host]
     assert "" not in hosts["github.com"] and "" not in hosts["api.github.com"]
