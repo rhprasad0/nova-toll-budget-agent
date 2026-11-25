@@ -70,6 +70,13 @@
       "remote_hash": "882b89408a8118bc156e7b2c43de38a8",
       "stamp": "2026-11-17T21:16:57.484066Z"
     },
+    "./vaults/chaos-lab-github.yaml": {
+      "kind": "vault",
+      "id": "vlt_011ChQEE141Cbf9bC7hoyLvA",
+      "hash": "11408820de2d76696dd4a5e843588a16",
+      "remote_hash": "11408820de2d76696dd4a5e843588a16",
+      "stamp": "2026-11-25T19:51:25.655673Z"
+    },
     "./vaults/docs-github.yaml": {
       "kind": "vault",
       "id": "vlt_011Ch9CGytbJYSdYMXCha8iG",
