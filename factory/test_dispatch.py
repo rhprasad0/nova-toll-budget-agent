@@ -77,6 +77,10 @@ def reviewed(stop: str = "end_turn") -> tuple[Any, Any]:
     return session, idle
 
 
+def agent_message(text: str, **extra: str) -> ns:
+    return ns(type="agent.message", content=[ns(type="text", text=text)], **extra)
+
+
 class FakeClient:
     def __init__(
         self,
@@ -86,7 +90,9 @@ class FakeClient:
         verdict: str | list[str] = "APPROVE",
         rubric: str | None = "satisfied",
         explanation: str | None = "Criterion 3 failed.",
+        after_grading: str | None = None,
     ) -> None:
+        self.after_grading = after_grading
         self.phases = {"sesn_1": list(phases or [])}
         self.review = review or [reviewed()]
         self.verdicts = [verdict] if isinstance(verdict, str) else list(verdict)
@@ -135,11 +141,9 @@ class FakeClient:
         return self.current[session_id][0]
 
     def events(self, session_id: str, **kwargs: Sdk) -> list[Any]:
-        if kwargs["types"] == ["agent.message"]:
+        if "agent.message" in kwargs["types"]:
             assert kwargs["order"] == "desc"
-            texts = ["An earlier message.", self.messages[session_id]]
-            events = [ns(content=[ns(type="text", text=text)]) for text in texts]
-            return events[::-1][: kwargs["limit"]]
+            return self.message_events(session_id)[::-1][: kwargs["limit"]]
         if kwargs["types"] == ["span.outcome_evaluation_end"]:
             assert session_id == "sesn_1" and kwargs["order"] == "desc"
             if self.rubric is None:
@@ -148,6 +152,19 @@ class FakeClient:
         assert kwargs["types"] == ["session.status_idle"]
         idle = self.current[session_id][1]
         return [] if idle is None else [idle]
+
+    def message_events(self, session_id: str) -> list[Any]:
+        timeline = [
+            agent_message("An earlier message."),
+            agent_message(self.messages[session_id]),
+        ]
+        if session_id == "sesn_1" and self.after_grading is not None:
+            timeline += [
+                ns(type="span.outcome_evaluation_start"),
+                agent_message("Grader thinking.", session_thread_id="sthr_grader"),
+                agent_message(self.after_grading),
+            ]
+        return timeline
 
     def send(self, session_id: str, events: list[dict[str, Any]]) -> None:
         if events[0]["type"] == "user.interrupt":
@@ -444,6 +461,37 @@ def test_a_session_waiting_on_its_sandbox_tools_is_still_running() -> None:
     )
     report = watch(client, built())
     assert "Outcome: **success**" in report and client.interrupted == []
+
+
+def test_the_workers_reply_to_the_grader_never_becomes_the_pr_body() -> None:
+    client = FakeClient(
+        [passing(phase(None, status="running")), phase("idle_1")],
+        after_grading="The independent grader found every criterion met.",
+    )
+    github = built(checks=[PASSING])
+    report = watch(client, github)
+    assert "Outcome: **success**" in report
+    assert github.opened == [("Loader drops rows", PR_BODY)]
+
+
+def test_the_pr_body_is_the_reply_to_the_latest_feedback_after_grading() -> None:
+    timeline = [
+        agent_message("First body."),
+        ns(type="span.outcome_evaluation_start"),
+        agent_message("Grader thinking.", session_thread_id="sthr_grader"),
+        agent_message("Thanks, grader."),
+        ns(type="user.message"),
+        agent_message("Body after review."),
+    ]
+
+    def reading(events: list[Any]) -> Sdk:
+        def listed(session_id: str, **kwargs: Sdk) -> list[Any]:
+            return events[::-1][: kwargs["limit"]]
+
+        return ns(beta=ns(sessions=ns(events=ns(list=listed))))
+
+    assert dispatch.final_message(reading(timeline), "sesn_1") == "Body after review."
+    assert dispatch.final_message(reading(timeline[:4]), "sesn_1") == "First body."
 
 
 def test_an_approved_build_opens_the_pr_and_marks_it_ready_after_ci() -> None:

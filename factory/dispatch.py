@@ -556,15 +556,25 @@ def wait_for_idle(
 
 def final_message(client: Sdk, session_id: str) -> str:
     events = client.beta.sessions.events.list(
-        session_id, types=["agent.message"], order="desc", limit=1
+        session_id,
+        types=["agent.message", "span.outcome_evaluation_start", "user.message"],
+        order="desc",
+        limit=100,
     )
-    return next(
-        (
-            "\n".join(b.text for b in event.content if b.type == "text").strip()
-            for event in events
-        ),
-        "",
-    )
+    latest: str | None = None
+    graded = False
+    for event in events:
+        if event.type == "user.message":
+            break
+        if event.type == "span.outcome_evaluation_start":
+            graded = True
+        elif getattr(event, "session_thread_id", None) is None:
+            text = "\n".join(b.text for b in event.content if b.type == "text").strip()
+            if graded:
+                return text
+            if latest is None:
+                latest = text
+    return latest or ""
 
 
 def grade(client: Sdk, session_id: str) -> Sdk:
