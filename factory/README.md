@@ -26,9 +26,9 @@ flowchart TB
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Dispatcher | [`dispatch.py`](dispatch.py), run by [`factory-dispatch.yml`](../.github/workflows/factory-dispatch.yml) | Admits the issue, starts the worker session, waits for it, runs up to three review rounds, opens the pull request, runs CI feedback rounds, and posts the outcome on the issue. |
-| Worker | [`agents/worker.md`](agents/worker.md) | Writes a failing end-to-end test, makes the change, runs what the sandbox can of CI, pushes a branch, and returns the pull request body. |
-| Rubric | [`rubrics/worker.md`](rubrics/worker.md) | What the grader checks before review. |
-| Reviewer | [`agents/reviewer.md`](agents/reviewer.md) | Checks the branch against the issue and `CLAUDE.md` from a session that has not seen the worker's reasoning; reports `APPROVE`, `CHANGES REQUESTED` or `BLOCKED` and changes nothing. |
+| Worker | [`agents/worker.md`](agents/worker.md) | Writes a failing end-to-end test, makes the change, runs what the sandbox can of CI, pushes a branch, and returns the pull request body. chaos-lab's is [`agents/chaos-lab-worker.md`](agents/chaos-lab-worker.md). |
+| Rubric | [`rubrics/worker.md`](rubrics/worker.md) | What the grader checks before review; chaos-lab's is [`rubrics/chaos-lab-worker.md`](rubrics/chaos-lab-worker.md). |
+| Reviewer | [`agents/reviewer.md`](agents/reviewer.md) | Checks the branch against the issue and `CLAUDE.md` from a session that has not seen the worker's reasoning; reports `APPROVE`, `CHANGES REQUESTED` or `BLOCKED` and changes nothing. chaos-lab's is [`agents/chaos-lab-reviewer.md`](agents/chaos-lab-reviewer.md). |
 | Docs agent | [`agents/docs.md`](agents/docs.md), scheduled by [`deployments/docs.yaml`](deployments/docs.yaml) | Runs nightly on `main` and opens one pull request when the code proves a Markdown statement false. Keeps notes between nights in [a memory store](memory_stores/docs.yaml). |
 | Environments | [`environments/`](environments/) | Self-hosted sandboxes, a write one for the worker and a read one for the reviewer: `tollchat-box-*` for this repository (the read one also serves the docs agent) and `chaos-lab-box-*` for chaos-lab. |
 | Sandbox | [`sandbox/`](sandbox/) | On the factory box, a poller per slot takes work from Managed Agents and [`spawn.sh`](sandbox/spawn.sh) starts one container per session from the [toolchain image](sandbox/Dockerfile), with a fresh clone and two disposable PostGIS databases. |
