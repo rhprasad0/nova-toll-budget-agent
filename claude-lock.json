@@ -4,6 +4,22 @@
     "base_url": "https://api.anthropic.com"
   },
   "resources": {
+    "./agents/chaos-lab-reviewer.md": {
+      "kind": "agent",
+      "id": "agent_01KQtABYB5RSKemsxsNxcFKt",
+      "version": "1",
+      "hash": "410a735d0569fc07f05b95d03fdf6fed",
+      "remote_hash": "d6efede03865a6f503c6f80eba89b5cb",
+      "stamp": "1"
+    },
+    "./agents/chaos-lab-worker.md": {
+      "kind": "agent",
+      "id": "agent_016wWemH675CebZiFiMKy3GA",
+      "version": "1",
+      "hash": "ef7019a00c0728b2e3b34dff9a452c4f",
+      "remote_hash": "7c8d9d1c4528b32b37c68cf66aef6eee",
+      "stamp": "1"
+    },
     "./agents/docs.md": {
       "kind": "agent",
       "id": "agent_01N8SxzRnREt1Rzsu6LCRzPD",
