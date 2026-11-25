@@ -155,22 +155,23 @@ class InstallationTokens:
 
 FACTORY = Path(__file__).resolve().parent
 LOCK = FACTORY / "claude-lock.json"
-AGENT_KEY = "./agents/worker.md"
-REVIEWER_KEY = "./agents/reviewer.md"
-RUBRIC = FACTORY / "rubrics" / "worker.md"
-ENVIRONMENTS = {
+REPOS = {
     "rhprasad0/nova-toll-budget-agent": {
+        "worker": "./agents/worker.md",
+        "reviewer": "./agents/reviewer.md",
+        "rubric": "rubrics/worker.md",
         "read": "./environments/tollchat-box-read.yaml",
         "write": "./environments/tollchat-box-write.yaml",
+        "vault": "./vaults/github.yaml",
     },
     "rhprasad0/chaos-lab": {
+        "worker": "./agents/chaos-lab-worker.md",
+        "reviewer": "./agents/chaos-lab-reviewer.md",
+        "rubric": "rubrics/chaos-lab-worker.md",
         "read": "./environments/chaos-lab-box-read.yaml",
         "write": "./environments/chaos-lab-box-write.yaml",
+        "vault": "./vaults/chaos-lab-github.yaml",
     },
-}
-VAULTS = {
-    "rhprasad0/nova-toll-budget-agent": "./vaults/github.yaml",
-    "rhprasad0/chaos-lab": "./vaults/chaos-lab-github.yaml",
 }
 LABEL = "factory"
 CLOSING = re.compile(
@@ -460,8 +461,8 @@ def create_session(
 ) -> str:
     session = client.beta.sessions.create(
         agent=lock_id(lock, agent_key),
-        environment_id=lock_id(lock, ENVIRONMENTS[repo][environment]),
-        vault_ids=[lock_id(lock, VAULTS[repo])],
+        environment_id=lock_id(lock, REPOS[repo][environment]),
+        vault_ids=[lock_id(lock, REPOS[repo]["vault"])],
         title=f"{repo}#{issue}",
         metadata={"repo": repo, "issue": str(issue)},
         budget={
@@ -495,7 +496,7 @@ def start_session(
     return create_session(
         client=client,
         lock=lock,
-        agent_key=AGENT_KEY,
+        agent_key=REPOS[repo]["worker"],
         environment="write",
         repo=repo,
         issue=issue,
@@ -504,7 +505,10 @@ def start_session(
             {
                 "type": "user.define_outcome",
                 "description": kickoff,
-                "rubric": {"type": "text", "content": RUBRIC.read_text()},
+                "rubric": {
+                    "type": "text",
+                    "content": (FACTORY / REPOS[repo]["rubric"]).read_text(),
+                },
                 "max_iterations": FEEDBACK_ROUNDS,
             }
         ],
@@ -807,7 +811,7 @@ def watch(run: Run, minutes: int, review_budget_cents: int) -> str:
         reviewer = create_session(
             client=run.client,
             lock=run.lock,
-            agent_key=REVIEWER_KEY,
+            agent_key=REPOS[run.repo]["reviewer"],
             environment="read",
             repo=run.repo,
             issue=run.issue,
@@ -922,7 +926,7 @@ def installation_tokens(
     return InstallationTokens(
         client=client,
         repo=repo,
-        vault_id=lock_id(lock, VAULTS[repo]),
+        vault_id=lock_id(lock, REPOS[repo]["vault"]),
         app_client_id=os.environ["FACTORY_APP_CLIENT_ID"],
         private_key=os.environ["FACTORY_APP_PRIVATE_KEY"],
         api_errors=(anthropic.APIError,),

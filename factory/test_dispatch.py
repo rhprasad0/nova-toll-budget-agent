@@ -17,11 +17,11 @@ OWNER = "rhprasad0"
 BOT = "tollchat-factory[bot]"
 LOCK = {
     "resources": {
-        dispatch.AGENT_KEY: {"id": "agent_1"},
-        dispatch.REVIEWER_KEY: {"id": "agent_review"},
-        dispatch.ENVIRONMENTS[REPO]["read"]: {"id": "env_read"},
-        dispatch.ENVIRONMENTS[REPO]["write"]: {"id": "env_write"},
-        dispatch.VAULTS[REPO]: {"id": "vlt_1"},
+        dispatch.REPOS[REPO]["worker"]: {"id": "agent_1"},
+        dispatch.REPOS[REPO]["reviewer"]: {"id": "agent_review"},
+        dispatch.REPOS[REPO]["read"]: {"id": "env_read"},
+        dispatch.REPOS[REPO]["write"]: {"id": "env_write"},
+        dispatch.REPOS[REPO]["vault"]: {"id": "vlt_1"},
     },
 }
 HEAD = "a" * 40
@@ -427,7 +427,8 @@ def test_an_issue_alone_starts_a_capped_build_graded_by_the_worker_rubric() -> N
     assert "resources" not in created
     (kickoff,) = created["initial_events"]
     assert kickoff["type"] == "user.define_outcome" and kickoff["max_iterations"] == 3
-    assert kickoff["rubric"] == {"type": "text", "content": dispatch.RUBRIC.read_text()}
+    rubric = (dispatch.FACTORY / dispatch.REPOS[REPO]["rubric"]).read_text()
+    assert kickoff["rubric"] == {"type": "text", "content": rubric}
     assert "# Worker outcome" in kickoff["rubric"]["content"]
     text = kickoff["description"]
     assert "issue #799" in text and "factory/issue-799" in text and "issue_read" in text
@@ -739,14 +740,9 @@ def test_tokens_are_minted_once_per_hour_and_reach_the_vault(
 
 
 def test_lock_keys_name_the_factory_files() -> None:
-    keys = (
-        dispatch.AGENT_KEY,
-        dispatch.REVIEWER_KEY,
-        *(key for pair in dispatch.ENVIRONMENTS.values() for key in pair.values()),
-        *dispatch.VAULTS.values(),
-    )
-    for key in keys:
-        assert (dispatch.FACTORY / key).is_file(), key
+    for files in dispatch.REPOS.values():
+        for key in files.values():
+            assert (dispatch.FACTORY / key).is_file(), key
 
 
 def test_watch_waits_until_every_required_check_reports() -> None:
@@ -792,31 +788,37 @@ def test_start_records_the_session_before_commenting(
     assert outputs.read_text() == "started=true\nsession_id=sesn_1\n"
 
 
-def test_each_repo_gets_its_own_environment_and_vault() -> None:
+def test_each_repo_gets_its_own_agents_rubric_environments_and_vault() -> None:
     lab = "rhprasad0/chaos-lab"
     lock = {"resources": {
-        dispatch.AGENT_KEY: {"id": "agent_1"},
-        **{key: {"id": f"id_{n}"} for n, key in enumerate(
-            [*dispatch.ENVIRONMENTS[REPO].values(), dispatch.VAULTS[REPO],
-             *dispatch.ENVIRONMENTS[lab].values(), dispatch.VAULTS[lab]])},
+        key: {"id": f"{name}_{role}"}
+        for repo, name in ((REPO, "tollchat"), (lab, "lab")) for role, key in dispatch.REPOS[repo].items()
     }}  # fmt: skip
     client = FakeClient()
-    for repo in (REPO, lab):
-        dispatch.create_session(
-            client=client, lock=lock, agent_key=dispatch.AGENT_KEY, environment="write",
-            repo=repo, issue=1, budget_cents=1, initial_events=[],
-        )  # fmt: skip
-    assert [(c["environment_id"], c["vault_ids"]) for c in client.created] == [
-        ("id_1", ["id_2"]),
-        ("id_4", ["id_5"]),
-    ]
+    dispatch.start_session(
+        client=client, lock=lock, repo=lab, issue=1,
+        author_name="bot", author_email="bot@example.com", budget_cents=1,
+    )  # fmt: skip
+    (worker,) = client.created
+    assert (worker["agent"], worker["environment_id"], worker["vault_ids"]) == (
+        "lab_worker", "lab_write", ["lab_vault"],
+    )  # fmt: skip
+    rubric = worker["initial_events"][0]["rubric"]["content"]
+    assert rubric == (dispatch.FACTORY / dispatch.REPOS[lab]["rubric"]).read_text()
+    assert rubric != (dispatch.FACTORY / dispatch.REPOS[REPO]["rubric"]).read_text()
+    dispatch.create_session(
+        client=client, lock=lock, agent_key=dispatch.REPOS[lab]["reviewer"],
+        environment="read", repo=lab, issue=1, budget_cents=1, initial_events=[],
+    )  # fmt: skip
+    assert client.created[1]["agent"] == "lab_reviewer"
+    assert client.created[1]["environment_id"] == "lab_read"
 
 
 @pytest.mark.parametrize("bad", ["../agents", "agent_1\nstarted=true", 7])
 def test_a_malformed_lock_id_stops_the_run(bad: object) -> None:
-    lock = {"resources": {dispatch.AGENT_KEY: {"id": bad}}}
+    key = dispatch.REPOS[REPO]["worker"]
     with pytest.raises(SystemExit, match="malformed"):
-        dispatch.lock_id(lock, dispatch.AGENT_KEY)
+        dispatch.lock_id({"resources": {key: {"id": bad}}}, key)
 
 
 @pytest.mark.parametrize(
