@@ -35,6 +35,20 @@
       "remote_hash": "9c2429db6bdd91016036c246e71a4e62",
       "stamp": "2026-11-23T16:47:42.170057Z"
     },
+    "./environments/chaos-lab-box-read.yaml": {
+      "kind": "environment",
+      "id": "env_01Vu6CXFxxaa3WqYFDHGwTjc",
+      "hash": "619b4789d9d5e085c6b69ea07592e86e",
+      "remote_hash": "3fa195090077880b656b74c390393858",
+      "stamp": "2026-11-25T15:35:52.384429Z"
+    },
+    "./environments/chaos-lab-box-write.yaml": {
+      "kind": "environment",
+      "id": "env_01XfNfSzaYPFUu6oH6C2qusm",
+      "hash": "ce29c19338d5f8864ce573df616d9d64",
+      "remote_hash": "92746b5ae7fc22b2509e31e6476da284",
+      "stamp": "2026-11-25T15:35:52.564116Z"
+    },
     "./environments/tollchat-box-read.yaml": {
       "kind": "environment",
       "id": "env_01LmwXcuLPzGxoDS8LdVxCE7",
