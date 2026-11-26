@@ -1,8 +1,10 @@
 import io
 import json
+import subprocess
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Self, TypedDict, cast
 
 if TYPE_CHECKING:
@@ -20,7 +22,16 @@ class S3Object(TypedDict):
 
 
 def test_module_imports_without_psycopg() -> None:
-    assert "psycopg" not in sys.modules
+    loader = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, handler; assert 'psycopg' not in sys.modules",
+        ],
+        cwd=loader,
+        check=True,
+    )
 
 
 def test_eventbridge_object_is_normalized() -> None:
