@@ -144,8 +144,10 @@ for user in "${!ports[@]}"; do
   id="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_ID=//p' "$lab_environment" 2>/dev/null || true)"
   aws="$(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=' "$lab_environment" 2>/dev/null || true)"
   umask 077
-  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\n%s\n' \
-    "$id" "$key" "$aws" | sed '/^$/d' >"$lab_environment"
+  lab_database_url=
+  [[ "$user" == factory-write ]] && lab_database_url=postgresql://chaos_lab@10.249.0.1:15434/chaos_lab
+  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\nFACTORY_SANDBOX_DATABASE_URL=\nCHAOS_LAB_DATABASE_URL=%s\n%s\n' \
+    "$id" "$key" "$lab_database_url" "$aws" | sed '/^$/d' >"$lab_environment"
   umask 022
   chmod 600 "$lab_environment"
   sed -e "s/@USER@/$user/g" -e "s/@UID@/$uid/g" -e "s/TollChat factory/chaos-lab factory/" \
@@ -160,6 +162,7 @@ for user in "${!ports[@]}"; do
   as_user "$user" systemctl --user daemon-reload
   as_user "$user" systemctl --user restart docker.service
   as_user "$user" docker pull --quiet postgis/postgis:17-3.5 >/dev/null
+  as_user "$user" docker pull --quiet "$(sed -n 's/^emulator_image=//p' "$here/spawn.sh")" >/dev/null
   as_user "$user" docker pull --quiet "$(sed -n '1s/^FROM //p' "$here/Dockerfile")" >/dev/null
   build="$(mktemp -d)"
   cp "$here/Dockerfile" "$build/"

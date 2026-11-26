@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 ini=/tmp/pgbouncer.ini
-: "${RELAY_USER:?}" "${RELAY_PORT:?}" "${RELAY_CONNECTIONS:?}"
+: "${RELAY_USER:?}" "${RELAY_PORT:?}" "${RELAY_CONNECTIONS:?}" "${RELAY_DATABASE:=factory_sandbox}"
 printf '"%s" ""\n' "$RELAY_USER" >/tmp/userlist.txt
 
 render() {
@@ -10,7 +10,7 @@ render() {
   umask 077
   cat >"$ini.new" <<EOF
 [databases]
-factory_sandbox = host=$FACTORY_RDS_HOST port=5432 dbname=factory_sandbox user=$RELAY_USER password='$token'
+$RELAY_DATABASE = host=$FACTORY_RDS_HOST port=5432 dbname=$RELAY_DATABASE user=$RELAY_USER password='$token'
 
 [pgbouncer]
 listen_addr = 0.0.0.0

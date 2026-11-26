@@ -129,6 +129,7 @@ def test_factory_connects_only_to_its_own_databases(
     assert statements["ConnectFactoryDatabases"]["actions"] == ["rds-db:connect"]
     assert set(statements["ConnectFactoryDatabases"]["resources"]) == {
         "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/phoenix_factory",
+        "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/chaos_lab",
         "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/factory_sandbox",
         "arn:aws:rds-db:us-east-1:903859731897:dbuser:db-RESOURCE/factory_sandbox_reader",
     }

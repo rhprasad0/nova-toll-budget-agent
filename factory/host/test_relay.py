@@ -24,10 +24,19 @@ ROLES = [
     "CREATE ROLE phoenix_factory LOGIN",
     "CREATE DATABASE phoenix OWNER phoenix_factory",
     "CREATE ROLE factory_sandbox_reader LOGIN",
+    "CREATE ROLE rds_iam",
+    "CREATE ROLE rds_admin LOGIN CREATEROLE CREATEDB",
+    "GRANT rds_iam TO rds_admin WITH ADMIN OPTION",
 ]
 RELAYS = {
     "relay": ("factory_sandbox", "6432", "15"),
     "relay-read": ("factory_sandbox_reader", "6433", "5"),
+    "relay-chaos-lab": ("chaos_lab", "6434", "8"),
+}
+DATABASES = {
+    "relay": "factory_sandbox",
+    "relay-read": "factory_sandbox",
+    "relay-chaos-lab": "chaos_lab",
 }
 
 
@@ -71,6 +80,11 @@ def relay(tmp_path: Path) -> Iterator[str]:
         )
         docker("exec", f"{name}-rds", "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
                *(arg for sql in ROLES for arg in ("-c", sql)))  # fmt: skip
+        docker(
+            "cp", str(FACTORY / "relay/chaos-lab.sql"), f"{name}-rds:/tmp/chaos-lab.sql"
+        )
+        docker("exec", f"{name}-rds", "psql", "-U", "rds_admin", "-d", "postgres",
+               "-v", "ON_ERROR_STOP=1", "-f", "/tmp/chaos-lab.sql")  # fmt: skip
         (tmp_path / "rds").mkdir()
         docker("cp", f"{name}-rds:/tmp/cert", str(tmp_path / "rds/rds-ca.pem"))
         (tmp_path / "rds/rds-ca.pem").chmod(0o644)
@@ -86,11 +100,12 @@ def relay(tmp_path: Path) -> Iterator[str]:
             docker("create", "--name", container, "--network", name, "--network-alias", alias,
                    "--env", f"FACTORY_RDS_HOST={RDS_HOST}", "--env", f"RELAY_USER={user}",
                    "--env", f"RELAY_PORT={port}", "--env", f"RELAY_CONNECTIONS={connections}",
+                   "--env", f"RELAY_DATABASE={DATABASES[alias]}",
                    "--env", "AWS_ACCESS_KEY_ID=AKIAEXAMPLEEXAMPLE", "--env", "AWS_SECRET_ACCESS_KEY=example",
                    "factory-relay:test")  # fmt: skip
             docker("cp", str(tmp_path / "rds"), f"{container}:/rds")
             docker("start", container)
-            until(client(name, user, "factory_sandbox", "select 1", alias), container)
+            until(client(name, user, DATABASES[alias], "select 1", alias), container)
         yield name
     finally:
         docker(
@@ -161,3 +176,19 @@ def test_read_relay_serves_only_the_reader(relay: str) -> None:
         check=False,
     )
     assert writer.returncode != 0 and "authentication failed" in writer.stderr
+
+
+def test_chaos_lab_relay_owns_only_its_database(relay: str) -> None:
+    owner = docker(*client(relay, "chaos_lab", "chaos_lab",
+        "create table t (n int); insert into t values (1);"
+        " select current_user, current_database(), current_setting('statement_timeout')",
+        "relay-chaos-lab"))  # fmt: skip
+    assert owner.stdout.strip().splitlines()[-1] == "chaos_lab|chaos_lab|15min"
+    for user, database in (
+        ("factory_sandbox", "chaos_lab"),
+        ("chaos_lab", "factory_sandbox"),
+    ):
+        other = docker(
+            *client(relay, user, database, "select 1", "relay-chaos-lab"), check=False
+        )
+        assert other.returncode != 0

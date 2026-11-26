@@ -50,13 +50,28 @@ def test_compose_resolves_and_keeps_the_trace_stack_off_the_sandbox_network(
     assert ENV["FACTORY_RDS_HOST"] in str(owner["extra_hosts"])
     published = {(p["host_ip"], p["published"]) for p in owner["ports"]}
     assert {ip for ip, _ in published} == {"127.0.0.1", "10.249.0.1"}
-    assert {port for ip, port in published if ip == "10.249.0.1"} == {"15432", "15433"}
-    for name in ("aws-credentials", "phoenix", "collector", "relay", "relay-read"):
+    assert {port for ip, port in published if ip == "10.249.0.1"} == {
+        "15432",
+        "15433",
+        "15434",
+    }
+    for name in (
+        "aws-credentials",
+        "phoenix",
+        "collector",
+        "relay",
+        "relay-read",
+        "relay-chaos-lab",
+    ):
         assert services[name]["network_mode"] == "service:trace-netns"
     relays = {
         services[name]["environment"]["RELAY_USER"]: services[name]["environment"][
             "RELAY_PORT"
         ]
-        for name in ("relay", "relay-read")
+        for name in ("relay", "relay-read", "relay-chaos-lab")
     }
-    assert relays == {"factory_sandbox": "6432", "factory_sandbox_reader": "6433"}
+    assert relays == {
+        "factory_sandbox": "6432",
+        "factory_sandbox_reader": "6433",
+        "chaos_lab": "6434",
+    }
