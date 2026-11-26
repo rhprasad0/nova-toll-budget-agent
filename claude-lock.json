@@ -7,18 +7,18 @@
     "./agents/chaos-lab-reviewer.md": {
       "kind": "agent",
       "id": "agent_01KQtABYB5RSKemsxsNxcFKt",
-      "version": "2",
-      "hash": "2f41c1be820e3717baa221195c06d4e9",
-      "remote_hash": "adcf72027b733b149788c00c91b0753c",
-      "stamp": "2"
+      "version": "3",
+      "hash": "ec694a66ae868b7563e84a4b844585ca",
+      "remote_hash": "dfcb6e9c4ae6ba55c2d4325fc83084ff",
+      "stamp": "3"
     },
     "./agents/chaos-lab-worker.md": {
       "kind": "agent",
       "id": "agent_016wWemH675CebZiFiMKy3GA",
-      "version": "2",
-      "hash": "1bf744a56e490570a3cf1a3101473296",
-      "remote_hash": "64cd8960bfa4e8e766106ed32323e279",
-      "stamp": "2"
+      "version": "3",
+      "hash": "9ed8af222294370e574450e4115b4fcf",
+      "remote_hash": "a63178815f12bb8759c5a9156624d571",
+      "stamp": "3"
     },
     "./agents/docs.md": {
       "kind": "agent",
