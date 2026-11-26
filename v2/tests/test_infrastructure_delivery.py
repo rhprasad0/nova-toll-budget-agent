@@ -294,10 +294,7 @@ def test_setup_uv_v10_pins_version_and_checksum() -> None:
 
 def _assert_development_delivery_caller(source: str) -> None:
     workflow = cast(dict[str, object], yaml.safe_load(source))
-    assert workflow_trigger(workflow) == {
-        "push": {"branches": ["main"]},
-        "workflow_dispatch": None,
-    }
+    assert workflow_trigger(workflow) == {"workflow_dispatch": None}
     assert workflow["permissions"] == {"contents": "read"}
     # Safe because admission no longer waits on an earlier run inside the lock.
     assert workflow["concurrency"] == {
@@ -1804,7 +1801,7 @@ def test_development_delivery_workflow_is_parsed_and_split_before_oidc() -> None
     }
     for original, replacement in (
         ("  workflow_dispatch:\n", '  schedule:\n    - cron: "17 8 * * *"\n'),
-        ("      - main\n  workflow_dispatch:", '      - "**"\n  workflow_dispatch:'),
+        ("on:\n  workflow_dispatch:", "on:\n  push:\n  workflow_dispatch:"),
         ("cancel-in-progress: false", "cancel-in-progress: true"),
         ("environment: development", "environment: production"),
         (
