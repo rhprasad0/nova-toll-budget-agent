@@ -26,7 +26,7 @@ ROLES = [
     "CREATE ROLE factory_sandbox_reader LOGIN",
     "CREATE ROLE rds_iam",
     "CREATE ROLE rds_admin LOGIN CREATEROLE CREATEDB",
-    "GRANT rds_iam TO rds_admin WITH ADMIN OPTION",
+    "GRANT rds_iam TO rds_admin WITH ADMIN OPTION, INHERIT FALSE, SET FALSE",
 ]
 RELAYS = {
     "relay": ("factory_sandbox", "6432", "15"),
@@ -192,3 +192,13 @@ def test_chaos_lab_relay_owns_only_its_database(relay: str) -> None:
             *client(relay, user, database, "select 1", "relay-chaos-lab"), check=False
         )
         assert other.returncode != 0
+
+
+def test_chaos_lab_setup_leaves_the_admin_out_and_public_off(relay: str) -> None:
+    state = docker("exec", f"{relay}-rds", "psql", "-U", "postgres", "-At", "-c",
+        "select (select count(*) from pg_auth_members m join pg_roles r on r.oid = m.roleid"
+        "  join pg_roles u on u.oid = m.member"
+        "  where r.rolname = 'chaos_lab' and u.rolname = 'rds_admin' and m.set_option),"
+        " has_database_privilege('public', 'chaos_lab', 'connect'),"
+        " pg_has_role('chaos_lab', 'rds_iam', 'member')")  # fmt: skip
+    assert state.stdout.strip() == "0|f|t"
