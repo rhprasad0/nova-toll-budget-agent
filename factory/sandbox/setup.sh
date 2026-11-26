@@ -142,9 +142,10 @@ for user in "${!ports[@]}"; do
   lab_environment="/etc/factory-sandbox/chaos-lab-${user#factory-}.env"
   key="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_KEY=//p' "$lab_environment" 2>/dev/null || true)"
   id="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_ID=//p' "$lab_environment" 2>/dev/null || true)"
+  aws="$(grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=' "$lab_environment" 2>/dev/null || true)"
   umask 077
-  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\n' \
-    "$id" "$key" >"$lab_environment"
+  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\n%s\n' \
+    "$id" "$key" "$aws" | sed '/^$/d' >"$lab_environment"
   umask 022
   chmod 600 "$lab_environment"
   sed -e "s/@USER@/$user/g" -e "s/@UID@/$uid/g" -e "s/TollChat factory/chaos-lab factory/" \

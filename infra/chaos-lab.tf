@@ -60,3 +60,29 @@ resource "aws_s3_bucket_policy" "chaos_lab" {
   bucket = aws_s3_bucket.chaos_lab[0].id
   policy = data.aws_iam_policy_document.chaos_lab[0].json
 }
+
+resource "aws_iam_user" "chaos_lab_session" {
+  count = local.factory_count
+  name  = "chaos-lab-session"
+}
+
+data "aws_iam_policy_document" "chaos_lab_session" {
+  count = local.factory_count
+  statement {
+    sid       = "UseChaosLabObjects"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
+    resources = ["${aws_s3_bucket.chaos_lab[0].arn}/*"]
+  }
+  statement {
+    sid       = "ListChaosLabBucket"
+    actions   = ["s3:ListBucket", "s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.chaos_lab[0].arn]
+  }
+}
+
+resource "aws_iam_user_policy" "chaos_lab_session" {
+  count  = local.factory_count
+  name   = "chaos-lab-session"
+  user   = aws_iam_user.chaos_lab_session[0].name
+  policy = data.aws_iam_policy_document.chaos_lab_session[0].json
+}

@@ -48,6 +48,8 @@ docker run --rm --init --name "$name" --network "$name" \
   --env PGHOST=postgres --env PGPORT=5432 --env PGUSER=postgres \
   --env RETAINED_PGHOST=postgres-retained --env RETAINED_PGPORT=5432 \
   --env FACTORY_SANDBOX_DATABASE_URL \
+  --env AWS_ACCESS_KEY_ID --env AWS_SECRET_ACCESS_KEY --env AWS_REGION=us-east-1 \
+  --env AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
   --env POSTGRES_CONTAINER_ID="$name-postgres" \
   --env RETAINED_POSTGRES_CONTAINER_ID="$name-retained" \
   --env DISPOSABLE_DOCKER_NETWORK="container:$name" \
