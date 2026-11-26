@@ -161,7 +161,7 @@
     "v2/lambdas/loader/parse_csv.py": "313d5d0843f9e884e7649dc66da3ebc5cdb015e2484899f4152d5ab9fb7b19ac",
     "v2/lambdas/loader/parse_xml.py": "5cd17e7b0e12ecb4a897c3f8fdb1431a3396ad27c1e159f0de10e256ac91cf86",
     "v2/lambdas/publisher/costs.py": "61b82090f88090b0f5742dee2674c8ebc3ce2c38712f9e7dce0b8f2765783abf",
-    "v2/pyproject.toml": "868b0e3f208584de083b587d8ce57cb12942cfe33988c74198f810b7c2e6d416",
+    "v2/pyproject.toml": "3b25c8d9351a9840d7480b4b47a84bfec07321a22abf1a73824af7edc54241ff",
     "v2/scripts/adopt_production_baseline.py": "77d574fc0bab36483224a5f8187cb80f107509e80290ab3cac9a2990f52c6737",
     "v2/scripts/blue_green.py": "99fcb31cd5af1c78c21e4aa6317a01c83f3e28caed37472312938736e61122cf",
     "v2/scripts/build_agentcore_zips.sh": "9c76ef918f4d7c21b2d7eb6f51f2db6d3103810c2c618c1b73b2ab41c77684c4",
@@ -185,7 +185,7 @@
     "v2/scripts/shared-package-compatibility.json": "3f634554f713980c37d362c1f69547fd41b431a308a2a33d7ad3a1c39f478e24",
     "v2/scripts/shared_packages.py": "16247f229569e9e89b81e1a36243e183840a38ba4207a61edf227f1222130331",
     "v2/scripts/verify_release_bundle.py": "a0ff16ce79746979c9653b8c71fac4f12f6ca9475f09ebd289b623e66b8483d1",
-    "v2/uv.lock": "652ca02a42d127a5270421bf98b4fae3c66fedaae162c4be2073a50cf4e8bfa2"
+    "v2/uv.lock": "ac6a3d866df6f2e7b8d056570f2ff79b1417a50ae16b87d123cb2d2b586902a5"
   },
   "packages": {
     "agentcore.zip": "9499e745c7a9f4fce86cfd37b72276763013a873c90a7ee606fa31324f675234",

@@ -164,7 +164,8 @@ From `v2/`, run the offline tests and deterministic release builds:
 ```sh
 uv sync --locked
 python3 scripts/check_repository.py
-uv run coverage run -m pytest
+uv run coverage run -m pytest -n auto --dist loadfile
+uv run coverage combine
 uv run coverage report
 node --test tests/*.mjs
 npm ci --prefix lambdas/chat_proxy

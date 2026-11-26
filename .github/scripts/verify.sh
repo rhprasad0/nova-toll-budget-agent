@@ -91,7 +91,8 @@ loader() (
   step terraform -chdir=infra init -backend=false -input=false
   # Delivery rejects a shared-resource change only after merge; this catches it here.
   step python3 scripts/infrastructure_plan.py "$base"
-  step uv run coverage run -m pytest --durations=30 --durations-min=1
+  step uv run coverage run -m pytest -n auto --dist loadfile --durations=30 --durations-min=1
+  step uv run coverage combine
   step uv run coverage report
   step node --test tests/*.mjs
   if [[ "$event" != pull_request ]]; then
@@ -152,7 +153,7 @@ database() {
 }
 
 factory() {
-  step uv run --project v2 --locked pytest factory
+  step uv run --project v2 --locked pytest -n auto --dist loadfile factory
 }
 
 case "$job" in

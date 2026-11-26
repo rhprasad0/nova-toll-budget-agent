@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from fnmatch import fnmatchcase
 from pathlib import Path
 from textwrap import dedent
@@ -923,7 +924,7 @@ def main() -> None:
         )
     ) == ("2fb102f9936bdf18e87ec6104e2ad3462620758bba0ef1ba215dee7024e492a2")
     production_locals = terraform_block(IAM, "locals", 3)
-    for sid in (
+    trace_sids = (
         "ReadAgentCoreTraceSubscription",
         "ReadAgentCoreTraceRoles",
         "ReadAgentCoreTraceFirehose",
@@ -934,15 +935,21 @@ def main() -> None:
         "ManageAgentCoreTraceRetention",
         "ManageAgentCoreTraceCatalog",
         "ManageAgentCoreTraceNamedQuery",
-    ):
-        leaked_trace_sid = IAM.replace(
+    )
+    leaked_trace_sids = [
+        IAM.replace(
             production_locals,
             production_locals.replace(f'    "{sid}",\n', ""),
             1,
         )
-        assert production_policies_digest(
-            rendered_production_policies(leaked_trace_sid)
-        ) != ("2fb102f9936bdf18e87ec6104e2ad3462620758bba0ef1ba215dee7024e492a2")
+        for sid in trace_sids
+    ]
+    with ThreadPoolExecutor() as pool:
+        leaked_renders = list(pool.map(rendered_production_policies, leaked_trace_sids))
+    for leaked in leaked_renders:
+        assert production_policies_digest(leaked) != (
+            "2fb102f9936bdf18e87ec6104e2ad3462620758bba0ef1ba215dee7024e492a2"
+        )
     assert len(planner_documents) == 10
     assert len(planner_documents) <= 10
     assert set(planner_documents) == {
