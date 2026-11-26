@@ -7,18 +7,18 @@
     "./agents/chaos-lab-reviewer.md": {
       "kind": "agent",
       "id": "agent_01KQtABYB5RSKemsxsNxcFKt",
-      "version": "1",
-      "hash": "410a735d0569fc07f05b95d03fdf6fed",
-      "remote_hash": "d6efede03865a6f503c6f80eba89b5cb",
-      "stamp": "1"
+      "version": "2",
+      "hash": "2f41c1be820e3717baa221195c06d4e9",
+      "remote_hash": "adcf72027b733b149788c00c91b0753c",
+      "stamp": "2"
     },
     "./agents/chaos-lab-worker.md": {
       "kind": "agent",
       "id": "agent_016wWemH675CebZiFiMKy3GA",
-      "version": "1",
-      "hash": "ef7019a00c0728b2e3b34dff9a452c4f",
-      "remote_hash": "7c8d9d1c4528b32b37c68cf66aef6eee",
-      "stamp": "1"
+      "version": "2",
+      "hash": "1bf744a56e490570a3cf1a3101473296",
+      "remote_hash": "64cd8960bfa4e8e766106ed32323e279",
+      "stamp": "2"
     },
     "./agents/docs.md": {
       "kind": "agent",
@@ -54,16 +54,16 @@
     "./environments/chaos-lab-box-read.yaml": {
       "kind": "environment",
       "id": "env_01Vu6CXFxxaa3WqYFDHGwTjc",
-      "hash": "619b4789d9d5e085c6b69ea07592e86e",
-      "remote_hash": "3fa195090077880b656b74c390393858",
-      "stamp": "2026-11-25T15:35:52.384429Z"
+      "hash": "b7a8b2e06324bab0b21272ba01f999a2",
+      "remote_hash": "0d2390e022210f26142615929b77f4e5",
+      "stamp": "2026-11-26T14:44:40.264355Z"
     },
     "./environments/chaos-lab-box-write.yaml": {
       "kind": "environment",
       "id": "env_01XfNfSzaYPFUu6oH6C2qusm",
-      "hash": "ce29c19338d5f8864ce573df616d9d64",
-      "remote_hash": "92746b5ae7fc22b2509e31e6476da284",
-      "stamp": "2026-11-25T15:35:52.564116Z"
+      "hash": "a94de3d6dcbd0840c2b24df9708696e3",
+      "remote_hash": "2ecafc3ad72c8a80bd7819e9074417ec",
+      "stamp": "2026-11-26T14:44:40.647379Z"
     },
     "./environments/tollchat-box-read.yaml": {
       "kind": "environment",
