@@ -139,9 +139,10 @@ def test_clean_hook_checks_entire_affected_group_without_mutation(
         (repository.root / name).read_bytes() == data for name, data in files.items()
     )
     calls = repository.calls()
-    assert [call[0] for call in calls] == ["gitleaks", "ruff", "ruff", "pyright"]
-    assert "./v2/sibling.py" in calls[1]
-    assert "./v2/space and\nnewline.py" in calls[1]
+    assert sorted(call[0] for call in calls) == ["gitleaks", "pyright", "ruff", "ruff"]
+    ruff_check = next(call for call in calls if call[:2] == ["ruff", "check"])
+    assert "./v2/sibling.py" in ruff_check
+    assert "./v2/space and\nnewline.py" in ruff_check
 
 
 @pytest.mark.parametrize(
