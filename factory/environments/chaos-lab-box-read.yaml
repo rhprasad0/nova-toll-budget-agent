@@ -1,4 +1,4 @@
 name: chaos-lab-box-read
-description: Self-hosted read sandbox on the factory box for chaos-lab builds; spawn.sh gives each session a fresh Spark and retail Postgres lab.
+description: Self-hosted read sandbox on the factory box for chaos-lab builds.
 config:
   type: self_hosted

@@ -20,9 +20,7 @@ PROTECTED_PREFIXES = {
         ".github/",
         "verify.sh",
         "tests/",
-        "generator/",
         "bin/",
-        "lab/",
     ),
 }
 PROTECTED_FILES = {"security.md", "docs/security.md", ".mcp.json"}
