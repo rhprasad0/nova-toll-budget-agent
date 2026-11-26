@@ -550,10 +550,10 @@ def test_main_resolves_predecessor_and_skips_only_when_nothing_deployable_change
     assert _workflow_parse("development admission accepted: sha=x") is None
 
 
-def test_delivery_runs_only_on_push_or_dispatch_one_at_a_time() -> None:
+def test_delivery_runs_only_on_dispatch_one_at_a_time() -> None:
     workflow = yaml.safe_load((ROOT / DELIVERY_PATH).read_text())
     triggers = workflow[True]  # PyYAML reads the bare `on` key as True.
-    assert triggers == {"push": {"branches": ["main"]}, "workflow_dispatch": None}
+    assert triggers == {"workflow_dispatch": None}
     assert workflow["concurrency"] == {
         "group": "v2-development-delivery-${{ github.ref }}",
         "cancel-in-progress": False,

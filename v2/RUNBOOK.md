@@ -6,8 +6,8 @@ account scopes, failure behavior, and development-first rollout checks.
 Trusted development planning runs automatically in PR and merge-queue CI. Its
 reusable plan validates the event-derived candidate and runs a read-only
 Terraform plan in the reviewer-free `development-plan` environment; it never
-applies Terraform. Development application delivery runs on every push to
-`main`, or on demand with `gh workflow run v2-development-delivery.yml --ref main`.
+applies Terraform. Development application delivery runs only on demand with
+`gh workflow run v2-development-delivery.yml --ref main`.
 It uses exact CI admission, one saved plan, fixed development migrations,
 application apply, and readiness gates. Workflow-level concurrency runs one
 delivery at a time; a newer pending run replaces an older pending one.
@@ -35,11 +35,11 @@ The secret-bearing manual
 `github.ref == 'refs/heads/main' && github.actor_id == '91573985' && github.triggering_actor == github.actor`.
 Only reruns initiated by that original actor may reach the
 development environment credentials. This owner-ID gate is separate from the
-reviewer-free `development` environment and does not change the push
-delivery path. Its credentialed deploy job requires
+reviewer-free `development` environment and does not change the
+dispatched delivery path. Its credentialed deploy job requires
 this exact predicate:
 `vars.DEVELOPMENT_DELIVERY_ENABLED == 'true' && github.triggering_actor == github.actor`,
-without restricting pushed or dispatched `main` runs by owner ID.
+without restricting dispatched `main` runs by owner ID.
 
 To stop development delivery, first delete that repository variable (or set it to
 literal `false`) with
@@ -56,7 +56,7 @@ step touches production.
 
 PRs use disposable PostGIS migration validation only; the checks are
 credential-free and never access or mutate deployed databases or schemas. The
-push delivery path is separate from the explicit manual development
+dispatched delivery path is separate from the explicit manual development
 migration workflow, which may be dispatched from `refs/heads/main` for the
 fixed development target and accepts no arbitrary target or migration-path
 inputs. See the [protected development migration workflow](#protected-development-migration-workflow-305-slice-3)

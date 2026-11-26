@@ -72,6 +72,7 @@ jobs:
       - name: Select frontend changes
         id: changes
         working-directory: .
+        shell: bash
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
