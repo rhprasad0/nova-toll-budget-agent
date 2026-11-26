@@ -26,7 +26,7 @@ trap 'rm -rf -- "$workspace"' EXIT
 mkdir -p -- "$install_dir"
 install_tool() {
   local url="$1" checksum="$2" member="$3" name="$4"
-  curl --fail --silent --show-error --location "$url" -o "$workspace/archive.tar.gz"
+  curl --fail --silent --show-error --location --retry 5 "$url" -o "$workspace/archive.tar.gz"
   printf '%s  %s\n' "$checksum" "$workspace/archive.tar.gz" | sha256sum --check --status
   tar -xzf "$workspace/archive.tar.gz" -C "$workspace" "$member"
   install -m 755 "$workspace/$member" "$install_dir/$name"
