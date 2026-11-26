@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -251,13 +252,14 @@ def results() -> Iterator[dict[str, Any]]:
                    "--network-alias", name, "--tmpfs", "/state/flows:mode=1777",
                    *env, f"{tag}:test", *command, "--set", "ssl_insecure=true")  # fmt: skip
         client = ["run", "--rm", "--network", tag, "--entrypoint", "python3", MITMPROXY]
-        out = {
-            name: json.loads(
-                docker(*client, "-c", CLIENT, json.dumps(CASES), name).stdout
-            )
-            for name in proxies
-        }
-        yield out
+        with ThreadPoolExecutor() as pool:
+            runs = {
+                name: pool.submit(
+                    docker, *client, "-c", CLIENT, json.dumps(CASES), name
+                )
+                for name in proxies
+            }
+        yield {name: json.loads(run.result().stdout) for name, run in runs.items()}
     finally:
         docker("rm", "--force", f"{tag}-echo",
                *[f"{tag}-{name}" for name in ("subscription", "sandbox-read", "sandbox-write")],
