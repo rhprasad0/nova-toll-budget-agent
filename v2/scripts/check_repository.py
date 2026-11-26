@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tokenize
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -284,9 +285,23 @@ def main(argv: list[str] | None = None) -> int:
             )
             checks.insert(0, [gitleaks, "protect", "--staged", "--redact"])
         reject_suppressions(paths)
-        for command in checks:
+        with ThreadPoolExecutor() as pool:
+            runs = [
+                pool.submit(
+                    subprocess.run, command, cwd=ROOT, capture_output=True, text=True
+                )
+                for command in checks
+            ]
+        failure: subprocess.CalledProcessError | None = None
+        for command, run in zip(checks, runs, strict=True):
+            result = run.result()
             print("Checking:", Path(command[0]).name, *command[1:3], flush=True)
-            subprocess.run(command, cwd=ROOT, check=True)
+            sys.stdout.write(result.stdout)
+            sys.stderr.write(result.stderr)
+            if result.returncode and failure is None:
+                failure = subprocess.CalledProcessError(result.returncode, command)
+        if failure:
+            raise failure
         return 0
     except (
         OSError,
