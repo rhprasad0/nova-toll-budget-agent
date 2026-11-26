@@ -19,6 +19,7 @@ dev = [
     "pyjwt[crypto]>=2.15.0",
     "pyright",
     "pytest",
+    "pytest-xdist>=3.8.0",
     "pyyaml>=6.0.3",
     "ruff",
     "types-boto3[bedrock-agentcore,bedrock-runtime,ce,cloudwatch,events,iam,logs,rds,s3,ssm,sts]==1.43.72",
@@ -55,6 +56,8 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true
+parallel = true
+patch = ["subprocess"]
 source = ["agent_tools"]
 
 [tool.coverage.report]
