@@ -95,9 +95,14 @@ data "aws_iam_policy_document" "factory" {
     }
   }
   statement {
-    sid       = "ReadChaosLabData"
-    actions   = ["s3:GetObject"]
+    sid       = "UseChaosLabObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
     resources = ["${aws_s3_bucket.chaos_lab[0].arn}/*"]
+  }
+  statement {
+    sid       = "ListChaosLabBucket"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.chaos_lab[0].arn]
   }
   statement {
     sid       = "ConnectFactoryDatabases"

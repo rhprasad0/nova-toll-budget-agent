@@ -26,7 +26,7 @@
     "infra/delivery_plan_validator.py": "5ca9964eb6b998ca3663b30fd2e2c82e857d13eca7b757409e37b3210e3b749a",
     "infra/development-tracing.tf": "489b1cb626e528a6fb0dc68d8d2dbf8e3beb24d40a7b3d7fa92631f00e920c97",
     "infra/factory-dashboard.tf": "318e4f061968e49c51db865788d4bdcb14f541e9daf41882037df65011af4582",
-    "infra/factory.tf": "4bce6d04bcb1a8f7791336064c6ca8e81689b39aa334bb5c538fd69f79253e46",
+    "infra/factory.tf": "224569dc0b7bbabb60d2c2c91552861a0396a123d09617e903d4e76e7bfb6010",
     "infra/iam.tf": "a409b433b53e99cabb60a82a17d809244cbfb3f960e8d0a2a7d52127f1099420",
     "infra/kms.tf": "75cc656020e2231fc88d3ccbcc4ceec135223e22d29a4f0cecfdd630984ad57a",
     "infra/lambda-stub/handler.py": "d86cf7746868e087960da8c551496bcf21aa71d79baf4d910e60fb3f43a05868",
