@@ -1,6 +1,10 @@
+\set ON_ERROR_STOP on
 CREATE ROLE chaos_lab LOGIN CONNECTION LIMIT 10;
 GRANT chaos_lab TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
-GRANT rds_iam TO chaos_lab;
-ALTER ROLE chaos_lab SET statement_timeout = '15min';
 CREATE DATABASE chaos_lab OWNER chaos_lab;
+SET ROLE chaos_lab;
 REVOKE ALL ON DATABASE chaos_lab FROM PUBLIC;
+RESET ROLE;
+REVOKE chaos_lab FROM CURRENT_USER;
+ALTER ROLE chaos_lab SET statement_timeout = '15min';
+GRANT rds_iam TO chaos_lab;
