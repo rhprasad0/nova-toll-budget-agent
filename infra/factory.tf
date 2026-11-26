@@ -95,6 +95,16 @@ data "aws_iam_policy_document" "factory" {
     }
   }
   statement {
+    sid       = "UseChaosLabObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
+    resources = ["${aws_s3_bucket.chaos_lab[0].arn}/*"]
+  }
+  statement {
+    sid       = "ListChaosLabBucket"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.chaos_lab[0].arn]
+  }
+  statement {
     sid       = "ConnectFactoryDatabases"
     actions   = ["rds-db:connect"]
     resources = [for user in concat([local.factory_database_user], local.factory_sandbox_users) : "arn:aws:rds-db:us-east-1:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"]
