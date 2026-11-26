@@ -49,6 +49,7 @@ services:
       - 127.0.0.1:4318:4318
       - 10.249.0.1:15432:6432
       - 10.249.0.1:15433:6433
+      - 10.249.0.1:15434:6434
     extra_hosts:
       - "${FACTORY_RDS_HOST:?}=${FACTORY_RDS_ADDR:?}"
     restart: unless-stopped
@@ -114,6 +115,16 @@ services:
       RELAY_USER: factory_sandbox_reader
       RELAY_PORT: "6433"
       RELAY_CONNECTIONS: "5"
+
+  relay-chaos-lab:
+    <<: *relay
+    environment:
+      FACTORY_RDS_HOST: ${FACTORY_RDS_HOST:?}
+      AWS_EC2_METADATA_SERVICE_ENDPOINT: http://127.0.0.1:9911
+      RELAY_USER: chaos_lab
+      RELAY_DATABASE: chaos_lab
+      RELAY_PORT: "6434"
+      RELAY_CONNECTIONS: "8"
 
   collector:
     image: otel/opentelemetry-collector-contrib:0.164.0@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b

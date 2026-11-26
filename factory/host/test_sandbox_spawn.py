@@ -44,6 +44,8 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
         if line.startswith("run\0")
     ]
     clone, postgres, retained, sandbox = runs
+    assert "AWS_EMULATOR_URL=http://aws:5000" not in sandbox
+    assert "CHAOS_LAB_DATABASE_URL" not in sandbox
     assert "clone" in clone and f"{tmp_path}/sessions/sesn_1:/workspace" in clone
     assert postgres[postgres.index("--network-alias") + 1] == "postgres"
     assert retained[retained.index("--network-alias") + 1] == "postgres-retained"
@@ -105,6 +107,17 @@ def test_spawn_clones_the_configured_repository(tmp_path: Path) -> None:
         "/workspace/chaos-lab",
     ]
     assert not [line for line in lines if line[0] == "compose"]
+    runs = [line for line in lines if line[0] == "run"]
+    emulator = next(line for line in runs if "work-Work_AB1-aws" in line)
+    assert emulator[emulator.index("--network-alias") + 1] == "aws"
+    assert emulator[-1].startswith("motoserver/moto:") and "@sha256:" in emulator[-1]
+    passed = {runs[-1][i + 1] for i, arg in enumerate(runs[-1]) if arg == "--env"}
+    assert {
+        "CHAOS_LAB_DATABASE_URL",
+        "AWS_EMULATOR_URL=http://aws:5000",
+        "NO_PROXY=localhost,127.0.0.1,aws",
+    } <= passed
+    assert not [arg for arg in passed if arg.startswith("AWS_ENDPOINT_URL")]
 
 
 def test_clean_removes_only_containers_older_than_any_session_and_old_workdirs(

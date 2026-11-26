@@ -9,11 +9,13 @@ socket="${DOCKER_HOST#unix://}"
 image=factory-sandbox:latest
 repo="${FACTORY_REPO:-rhprasad0/nova-toll-budget-agent}"
 clone="$workdir/${repo#*/}"
+emulator_image=motoserver/moto:5.2.5@sha256:59a1965d845249b04def37a0e2565f9cc6c44543cb89b68e90f28f344b3b0d1a
+lab=()
 proxy=(--env "HTTPS_PROXY=$FACTORY_PROXY" --env "HTTP_PROXY=$FACTORY_PROXY"
   --env "https_proxy=$FACTORY_PROXY" --env "http_proxy=$FACTORY_PROXY")
 
 cleanup() {
-  docker rm --force --volumes "$name" "$name-postgres" "$name-retained" >/dev/null 2>&1 || true
+  docker rm --force --volumes "$name" "$name-postgres" "$name-retained" "$name-aws" >/dev/null 2>&1 || true
   docker network rm "$name" >/dev/null 2>&1 || true
 }
 
@@ -37,6 +39,12 @@ for database in postgres retained; do
   docker run --detach --name "$name-$database" --network "$name" --network-alias "$alias" \
     --env POSTGRES_HOST_AUTH_METHOD=trust postgis/postgis:17-3.5 >/dev/null
 done
+if [[ "$repo" == rhprasad0/chaos-lab ]]; then
+  docker run --detach --name "$name-aws" --network "$name" --network-alias aws \
+    --env MOTO_IAM_LOAD_MANAGED_POLICIES=true "$emulator_image" >/dev/null
+  lab=(--env CHAOS_LAB_DATABASE_URL --env AWS_EMULATOR_URL=http://aws:5000
+    --env "NO_PROXY=localhost,127.0.0.1,aws" --env "no_proxy=localhost,127.0.0.1,aws")
+fi
 
 docker run --rm --init --name "$name" --network "$name" \
   --cap-drop ALL --security-opt no-new-privileges \
@@ -53,4 +61,5 @@ docker run --rm --init --name "$name" --network "$name" \
   --env POSTGRES_CONTAINER_ID="$name-postgres" \
   --env RETAINED_POSTGRES_CONTAINER_ID="$name-retained" \
   --env DISPOSABLE_DOCKER_NETWORK="container:$name" \
+  "${lab[@]}" \
   "$image"
