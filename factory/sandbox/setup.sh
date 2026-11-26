@@ -143,7 +143,7 @@ for user in "${!ports[@]}"; do
   key="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_KEY=//p' "$lab_environment" 2>/dev/null || true)"
   id="$(sed -n 's/^ANTHROPIC_ENVIRONMENT_ID=//p' "$lab_environment" 2>/dev/null || true)"
   umask 077
-  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\nFACTORY_LAB=lab/compose.yaml\n' \
+  printf 'ANTHROPIC_ENVIRONMENT_ID=%s\nANTHROPIC_ENVIRONMENT_KEY=%s\nFACTORY_REPO=rhprasad0/chaos-lab\n' \
     "$id" "$key" >"$lab_environment"
   umask 022
   chmod 600 "$lab_environment"
@@ -175,5 +175,5 @@ echo "ok: proxies on 10.249.0.1:18080 (read) and :18081 (write)"
 echo "next: set ANTHROPIC_ENVIRONMENT_ID and ANTHROPIC_ENVIRONMENT_KEY in /etc/factory-sandbox/factory-{read,write}.env"
 echo "and /etc/factory-sandbox/chaos-lab-{read,write}.env,"
 echo "then: sudo systemctl enable --now factory-worker-read@{1,2} factory-worker-write@{1,2}"
-echo "and, one slot each because the lab is memory-hungry:"
+echo "and, one slot each:"
 echo "sudo systemctl enable --now factory-worker-chaos-lab-read@1 factory-worker-chaos-lab-write@1"

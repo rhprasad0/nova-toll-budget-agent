@@ -73,14 +73,12 @@ def test_spawn_runs_one_session_with_its_databases_and_only_work_credentials(
     )
 
 
-def test_spawn_gives_a_lab_repository_a_fresh_lab_and_tears_it_down(
-    tmp_path: Path,
-) -> None:
+def test_spawn_clones_the_configured_repository(tmp_path: Path) -> None:
     fake = tmp_path / "bin"
     fake.mkdir()
     calls = tmp_path / "calls"
     (fake / "docker").write_text(
-        f'#!/usr/bin/env bash\nprintf "%s\\0" "$@" "LAB_CODE=${{LAB_CODE:-}}" >> {calls}\nprintf "\\n" >> {calls}\n'
+        f'#!/usr/bin/env bash\nprintf "%s\\0" "$@" >> {calls}\nprintf "\\n" >> {calls}\n'
     )
     (fake / "docker").chmod(0o755)
     env = {
@@ -89,7 +87,6 @@ def test_spawn_gives_a_lab_repository_a_fresh_lab_and_tears_it_down(
         "DOCKER_HOST": "unix:///run/user/1002/docker.sock",
         "FACTORY_PROXY": "http://10.249.0.1:18081",
         "FACTORY_REPO": "rhprasad0/chaos-lab",
-        "FACTORY_LAB": "lab/compose.yaml",
         "ANTHROPIC_SESSION_ID": "sesn_1",
         "ANTHROPIC_WORK_ID": "Work_AB1",
     }
@@ -98,32 +95,11 @@ def test_spawn_gives_a_lab_repository_a_fresh_lab_and_tears_it_down(
     )
     lines = [line.split("\0")[:-1] for line in calls.read_text().split("\n") if line]
     clone = next(line for line in lines if line[0] == "run" and "clone" in line)
-    assert clone[-3:-1] == [
+    assert clone[-2:] == [
         "https://github.com/rhprasad0/chaos-lab",
         "/workspace/chaos-lab",
     ]
-    snapshot = next(
-        line
-        for line in lines
-        if "/lab" in " ".join(line) and "archive" in " ".join(line)
-    )
-    assert f"{tmp_path}/sessions/sesn_1.lab:/lab" in snapshot
-    assert lines.index(clone) < lines.index(snapshot)
-    compose = [line for line in lines if line[0] == "compose"]
-    up = next(line for line in compose if "up" in line)
-    assert up[up.index("-f") + 1] == f"{tmp_path}/sessions/sesn_1.lab/lab/compose.yaml"
-    assert up[-1] == f"LAB_CODE={tmp_path}/sessions/sesn_1/chaos-lab"
-    assert up[up.index("-p") + 1] == "work-work_ab1"
-    assert "--wait" in up
-    sandbox = next(line for line in lines if line[-2:-1] == ["factory-sandbox:latest"])
-    assert lines.index(snapshot) < lines.index(up) < lines.index(sandbox)
-    assert "LAB_PROJECT=work-work_ab1" in sandbox
-    downs = [line for line in compose if "down" in line]
-    assert len(downs) == 2
-    assert all(
-        d[d.index("-p") + 1] == "work-work_ab1" and "--volumes" in d for d in downs
-    )
-    assert lines[-1][0] == "compose" and "down" in lines[-1]
+    assert not [line for line in lines if line[0] == "compose"]
 
 
 def test_clean_removes_only_containers_older_than_any_session_and_old_workdirs(

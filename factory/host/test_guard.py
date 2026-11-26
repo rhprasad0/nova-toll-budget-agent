@@ -208,8 +208,8 @@ def test_the_manifest_may_change_only_digests_and_packages(repo: Path) -> None:
 
 @pytest.mark.parametrize(
     ("path", "blocked"),
-    [("tests/test_gold.py", True), ("verify.sh", True), ("generator/retail.py", True),
-     ("lab/compose.yaml", True), ("bin/lab", True), (".github/workflows/verify.yml", True),
+    [("tests/test_gold.py", True), ("verify.sh", True), ("bin/load", True),
+     (".github/workflows/verify.yml", True),
      ("CLAUDE.md", True), ("pipelines/gold.py", False), ("factory/notes.py", False)],
 )  # fmt: skip
 def test_chaos_lab_protects_its_own_paths(path: str, blocked: bool) -> None:
