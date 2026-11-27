@@ -210,7 +210,8 @@ def test_the_manifest_may_change_only_digests_and_packages(repo: Path) -> None:
     ("path", "blocked"),
     [("tests/test_gold.py", True), ("verify.sh", True), ("bin/load", True),
      (".github/workflows/verify.yml", True),
-     ("CLAUDE.md", True), ("pipelines/gold.py", False), ("factory/notes.py", False)],
+     ("CLAUDE.md", True), ("pipelines/gold.py", False), ("factory/notes.py", False),
+     ("infra/etl.tf", False), ("infra/emulator.tfvars", False)],
 )  # fmt: skip
 def test_chaos_lab_protects_its_own_paths(path: str, blocked: bool) -> None:
     assert guard.protected(path, "rhprasad0/chaos-lab") is blocked
