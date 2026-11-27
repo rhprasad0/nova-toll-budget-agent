@@ -58,7 +58,7 @@ def protected(path: str, repo: str = TOLLCHAT) -> bool:
         or folded in PROTECTED_FILES
         or parts[-1] in PROTECTED_NAMES
         or any(part in PROTECTED_DIRS for part in parts[:-1])
-        or folded.endswith(PROTECTED_SUFFIXES)
+        or (repo == TOLLCHAT and folded.endswith(PROTECTED_SUFFIXES))
     )
 
 
